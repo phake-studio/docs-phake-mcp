@@ -23,7 +23,7 @@ Use the `google` strategy to authenticate users with their Google accounts. This
 AUTH_STRATEGY=google
 OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 OAUTH_CLIENT_SECRET=GOCSPX-your-secret
-OAUTH_SCOPES=https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly
+OAUTH_SCOPES=openid email profile
 OAUTH_REDIRECT_URI=https://your-server.com/oauth/provider-callback
 ```
 
@@ -44,9 +44,8 @@ You can override any preset with explicit `OAUTH_*` values.
 AUTH_STRATEGY=google
 OAUTH_CLIENT_ID=123456789-abc.apps.googleusercontent.com
 OAUTH_CLIENT_SECRET=GOCSPX-your-secret
-OAUTH_SCOPES=https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly
+OAUTH_SCOPES=openid email profile
 OAUTH_REDIRECT_URI=https://my-mcp.example.com/oauth/provider-callback
-AUTH_ALLOW_DIRECT_BEARER=true
 ```
 
 ## Available Scopes
