@@ -1,0 +1,169 @@
+---
+title: "Endpoints"
+description: "Complete reference for all HTTP endpoints exposed by an @phake/mcp server, including MCP transport and OAuth 2.1 routes."
+---
+
+## Overview
+
+Every `@phake/mcp` server exposes two groups of endpoints: MCP transport endpoints (always active) and OAuth endpoints (active when `AUTH_STRATEGY=oauth`).
+
+All endpoints include CORS headers. Preflight `OPTIONS` requests are handled automatically.
+
+---
+
+## MCP endpoints
+
+These endpoints implement the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/basic/transports).
+
+### `POST /mcp`
+
+The primary endpoint for all MCP communication. Accepts JSON-RPC 2.0 requests and dispatches them to the appropriate method handler.
+
+**When to use it:** This is the endpoint MCP clients connect to for tool calls, capability negotiation, and all other JSON-RPC messages.
+
+**Session handling:**
+
+- The first request must use the `initialize` method. The server generates a new session ID and returns it in the `Mcp-Session-Id` response header.
+- All subsequent requests must include the `Mcp-Session-Id` header. Requests without it receive `400 Bad Request`.
+- If the session ID is not found in the session store, the server returns `404 Not Found`.
+
+**Notifications:** JSON-RPC messages without an `id` (notifications) receive `202 Accepted` with no body.
+
+**Auth challenge:** When `AUTH_STRATEGY=oauth`, unauthenticated requests receive a `401` with a `WWW-Authenticate` header pointing to the authorization server metadata URL.
+
+```http
+POST /mcp HTTP/1.1
+Content-Type: application/json
+Mcp-Session-Id: <session-id>
+
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": { "name": "greet", "arguments": { "name": "Alice" } },
+  "id": 1
+}
+```
+
+### `GET /mcp`
+
+Returns `405 Method Not Allowed`.
+
+**When to use it:** This endpoint exists to explicitly reject GET requests to `/mcp` per the MCP specification. MCP clients should not issue GET requests to this path.
+
+### `DELETE /mcp`
+
+Terminates an active MCP session.
+
+**When to use it:** Call this when a client disconnects gracefully to free session resources. The request must include the `Mcp-Session-Id` header.
+
+Returns `202 Accepted` on success. Returns `400` if the header is missing or `404` if the session does not exist.
+
+```http
+DELETE /mcp HTTP/1.1
+Mcp-Session-Id: <session-id>
+```
+
+### `GET /health`
+
+Returns a JSON health check response.
+
+**When to use it:** Use for uptime monitoring, load balancer health probes, or verifying that the server is reachable before connecting an MCP client.
+
+```http
+GET /health HTTP/1.1
+```
+
+```json
+{
+  "status": "ok",
+  "timestamp": 1736000000000
+}
+```
+
+<Tip>
+  The built-in `health` tool (available via `POST /mcp`) provides richer
+  information including the runtime environment and, on Node.js, process uptime
+  and memory usage.
+</Tip>
+
+---
+
+## OAuth endpoints
+
+These endpoints implement [OAuth 2.1](https://oauth.net/2.1/) with PKCE. They are only meaningful when `AUTH_STRATEGY=oauth`. MCP clients that support OAuth discover them through the well-known metadata endpoints.
+
+### `GET /.well-known/oauth-authorization-server`
+
+Returns the OAuth authorization server metadata ([RFC 8414](https://www.rfc-editor.org/rfc/rfc8414)).
+
+**When to use it:** MCP clients fetch this automatically to discover the authorization and token endpoint URLs. You do not need to call this directly.
+
+### `GET /.well-known/oauth-protected-resource`
+
+Returns the protected resource metadata ([RFC 9470](https://www.rfc-editor.org/rfc/rfc9470)).
+
+Also handles path-based discovery at `/.well-known/oauth-protected-resource/*`. Accepts an optional `sid` query parameter for session-scoped metadata.
+
+**When to use it:** MCP clients that implement RFC 9470 resource-based discovery fetch this to determine which authorization server protects the `/mcp` resource.
+
+### `GET /authorize`
+
+Initiates the OAuth authorization flow. Validates the request parameters and redirects the user's browser to the provider's authorization page.
+
+**Request parameters (query string):**
+
+| Parameter | Description |
+|---|---|
+| `response_type` | Must be `code` |
+| `client_id` | The MCP client's registered client ID |
+| `redirect_uri` | Where to send the user after authorization |
+| `code_challenge` | PKCE code challenge (S256 method) |
+| `code_challenge_method` | Must be `S256` |
+| `state` | Opaque state value for CSRF protection |
+| `scope` | Space-separated requested scopes |
+
+### `POST /token`
+
+Exchanges an authorization code or refresh token for an access token.
+
+**When to use it:** MCP clients call this automatically after receiving an authorization code via the callback. Supports the `authorization_code` and `refresh_token` grant types.
+
+### `GET /oauth/callback`
+
+Browser landing page after the server redirects back with an RS authorization code. Returns an HTML page that signals the MCP client via `postMessage` if the page was opened as a popup.
+
+**When to use it:** Configure this as the OAuth redirect URI that points back to the MCP client. This is the intermediate RS callback — the client reads the `code` parameter from the URL and exchanges it via `POST /token`.
+
+### `GET /oauth/provider-callback`
+
+Receives the authorization code from the upstream OAuth provider (e.g., Google, GitHub) and completes the provider token exchange.
+
+**When to use it:** Configure this path as the redirect URI in your upstream OAuth application settings (e.g., in the Google Cloud Console). The server uses it to map provider tokens to RS tokens.
+
+### `POST /revoke`
+
+Revokes an access or refresh token ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009)).
+
+**When to use it:** MCP clients call this when the user logs out or revokes access. The current implementation accepts the request and returns success — extend or override this handler to add active token invalidation.
+
+### `POST /register`
+
+Dynamic client registration ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)). Registers a new MCP client and returns a `client_id`.
+
+**When to use it:** MCP clients that support dynamic registration call this automatically on first connection. Returns `201 Created` with the registered client metadata.
+
+**Request body (JSON):**
+
+| Field | Description |
+|---|---|
+| `redirect_uris` | Array of allowed redirect URIs |
+| `grant_types` | Requested grant types (e.g., `["authorization_code", "refresh_token"]`) |
+| `response_types` | Requested response types (e.g., `["code"]`) |
+| `client_name` | Human-readable client name |
+
+<Note>
+  The OAuth endpoints are attached unconditionally at router creation time, but
+  the authorization flow only succeeds when the required OAuth environment
+  variables (`OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, etc.) are set.   See the
+  [Configuration](/configuration/environment-variables) reference for the full list.
+</Note>

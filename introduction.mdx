@@ -1,0 +1,47 @@
+---
+title: "Introduction"
+description: "An overview of @phake/mcp — a TypeScript library for building MCP servers on Cloudflare Workers and Node.js."
+---
+
+`@phake/mcp` is a TypeScript library for building [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. MCP lets AI clients like Claude, Cursor, and VS Code discover and call tools exposed by your server. `@phake/mcp` handles the protocol, authentication, and runtime wiring so you can focus on defining tools.
+
+The library runs on both **Cloudflare Workers** and **Node.js**, and ships with built-in OAuth 2.1, Bearer, API key, and custom auth strategies — along with encrypted token storage backed by Cloudflare KV or SQLite.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Type-safe tools" icon="shield-check">
+    Define tools with Zod schemas for inputs and outputs. The library validates
+    requests automatically and infers TypeScript types for your handlers.
+  </Card>
+  <Card title="Multiple runtimes" icon="server">
+    Deploy to Cloudflare Workers or run on Node.js with Hono. A single tool
+    definition works across both runtimes without changes.
+  </Card>
+  <Card title="Auth strategies" icon="lock">
+    Choose from OAuth 2.1 PKCE, Bearer token, API key, custom headers, or no
+    auth. Strategy is auto-inferred from the environment variables you set.
+  </Card>
+  <Card title="Storage backends" icon="database">
+    Store tokens and sessions in Cloudflare KV (with AES-256-GCM encryption),
+    in-memory with LRU eviction, or SQLite via Drizzle ORM.
+  </Card>
+</CardGroup>
+
+## Supported runtimes
+
+| Runtime | Package export | Status |
+|---------|---------------|--------|
+| Cloudflare Workers | `@phake/mcp/runtime/worker` | Stable |
+| Node.js (Hono) | `@phake/mcp/runtime/node` | Experimental |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="bolt" href="/quickstart">
+    Scaffold a project with one command or follow the manual setup path.
+  </Card>
+  <Card title="Installation" icon="package" href="/installation">
+    Install the package and review peer dependency requirements.
+  </Card>
+</CardGroup>

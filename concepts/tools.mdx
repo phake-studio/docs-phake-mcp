@@ -1,0 +1,255 @@
+---
+title: "Tools"
+description: "Define typed functions that LLMs can call from your MCP server."
+---
+
+A **tool** is a typed function exposed by your MCP server that an LLM can invoke. Each tool has a name, a description the model uses to decide when to call it, an input schema validated at runtime, and a handler that produces the result.
+
+Use `defineTool` to create tools, then pass them to `createMCPServer`.
+
+## Defining a tool
+
+```typescript
+import { z } from "zod";
+import { defineTool } from "@phake/mcp";
+
+const greetTool = defineTool({
+  name: "greet",
+  title: "Greet User",
+  description: "Returns a greeting for the given name",
+  inputSchema: z.object({
+    name: z.string().describe("Name to greet"),
+  }),
+  outputSchema: z.object({
+    message: z.string().describe("The greeting message"),
+  }),
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+  },
+  handler: async (args) => {
+    return { message: `Hello, ${args.name}!` };
+  },
+});
+```
+
+Register your tools when creating the server:
+
+```typescript
+import { createMCPServer } from "@phake/mcp";
+
+const server = createMCPServer({
+  tools: [greetTool],
+});
+
+export default server;
+```
+
+## Tool definition fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Unique tool identifier. Use lowercase with underscores. |
+| `description` | `string` | Yes | Description shown to the LLM to decide when to call this tool. |
+| `inputSchema` | `ZodObject` | Yes | Zod schema for input validation. Arguments are type-inferred from this. |
+| `outputSchema` | `ZodRawShape \| ZodObject` | No | Zod schema for structured output. Normalized to `ZodRawShape` internally. |
+| `handler` | `function` | Yes | `(args, context) => Promise<ToolResult \| Record<string, unknown>>` |
+| `requiresAuth` | `boolean` | No | When `true`, the dispatcher automatically rejects calls without a provider token. |
+| `title` | `string` | No | Human-readable display title shown in client UIs. |
+| `annotations` | `object` | No | MCP behavioral hints for clients (see [Annotations](#annotations)). |
+| `meta` | `{ version?, last_update? }` | No | Auto-injected into every result as `tool_version` and `tool_last_update`. |
+
+## Handler return values
+
+Handlers can return either a plain object or a full `ToolResult`. Plain objects are automatically wrapped into structured content — you don't need to construct the `content` array yourself in the common case.
+
+<CodeGroup>
+
+```typescript Plain object (auto-wrapped)
+handler: async (args) => {
+  return { greeting: `Hello, ${args.name}!` };
+}
+// Becomes:
+// {
+//   content: [{ type: "text", text: '{"greeting":"Hello, ..."}' }],
+//   structuredContent: { greeting: "Hello, ..." },
+// }
+```
+
+```typescript Full ToolResult (passed through)
+handler: async (args) => {
+  return {
+    content: [{ type: "text", text: `Hello, ${args.name}!` }],
+    structuredContent: { greeting: `Hello, ${args.name}!` },
+  };
+}
+```
+
+</CodeGroup>
+
+A `ToolResult` has the following shape:
+
+```typescript
+interface ToolResult {
+  content: ToolContentBlock[];
+  isError?: boolean;        // set to true to signal a tool error
+  structuredContent?: Record<string, unknown>;
+}
+
+type ToolContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string }
+  | { type: "resource"; uri: string; mimeType?: string; text?: string };
+```
+
+## Authenticated tools
+
+Set `requiresAuth: true` to have the framework automatically reject calls that arrive without a valid provider token. Inside the handler, use `context.resolvedHeaders` to forward authentication to external APIs without constructing the header yourself.
+
+```typescript
+import { z } from "zod";
+import { defineTool } from "@phake/mcp";
+
+const profileTool = defineTool({
+  name: "get_profile",
+  description: "Fetch the authenticated user's profile",
+  inputSchema: z.object({}),
+  requiresAuth: true,
+  handler: async (_args, context) => {
+    const response = await fetch("https://api.example.com/me", {
+      headers: context.resolvedHeaders,
+    });
+    return await response.json();
+  },
+});
+```
+
+When you need to narrow the TypeScript type and guarantee `providerToken` is present, use `assertProviderToken`:
+
+```typescript
+import { assertProviderToken } from "@phake/mcp";
+
+handler: async (_args, context) => {
+  assertProviderToken(context); // throws "Authentication required" if missing
+  // context.providerToken is now typed as string
+  const token = context.providerToken;
+},
+```
+
+### Tool context
+
+Every handler receives a `context` object as its second argument:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `sessionId` | `string` | Current MCP session ID. |
+| `providerToken` | `string \| undefined` | Access token for external API calls. Present for OAuth, bearer, and API key strategies. |
+| `resolvedHeaders` | `Record<string, string> \| undefined` | Ready-to-use auth headers for `fetch`. Strategy-aware — use this instead of building headers manually. |
+| `authStrategy` | `AuthStrategy \| undefined` | Active strategy: `oauth`, `bearer`, `api_key`, `custom`, or `none`. |
+| `provider` | `ProviderInfo \| undefined` | Provider info object (OAuth only). |
+| `signal` | `AbortSignal \| undefined` | Abort signal for request cancellation. |
+
+## Annotations
+
+Annotations are behavioral hints for MCP clients. They are not enforced by the framework — they help clients display accurate UI and make safe decisions about when to invoke a tool automatically.
+
+| Annotation | Type | Default | Description |
+|------------|------|---------|-------------|
+| `readOnlyHint` | `boolean` | `false` | Tool does **not** modify any environment or state. |
+| `destructiveHint` | `boolean` | `true` | Tool may delete or overwrite data. |
+| `idempotentHint` | `boolean` | `false` | Repeated calls with identical arguments have no additional effect. |
+| `openWorldHint` | `boolean` | `true` | Tool interacts with external entities outside the server. |
+
+```typescript
+const searchTool = defineTool({
+  name: "search_documents",
+  description: "Search the document index",
+  inputSchema: z.object({ query: z.string() }),
+  annotations: {
+    readOnlyHint: true,      // only reads, never writes
+    destructiveHint: false,  // cannot delete data
+    idempotentHint: true,    // same query → same results
+    openWorldHint: false,    // no external network calls
+  },
+  handler: async (args) => { /* ... */ },
+});
+```
+
+## Error responses with `toolFail`
+
+Use `toolFail` to create a typed error factory that merges a message into a preset shape. This keeps error responses structurally consistent with success responses.
+
+```typescript
+import { toolFail } from "@phake/mcp";
+
+const fail = toolFail({ ok: false, items: null });
+
+handler: async (args) => {
+  if (!args.spreadsheet_id) {
+    return fail("spreadsheet_id is required");
+    // => { ok: false, items: null, error: "spreadsheet_id is required" }
+  }
+  // ...
+},
+```
+
+The factory signature is:
+
+```typescript
+function toolFail<T extends Record<string, unknown>>(
+  defaults: T
+): (error: string) => T & { error: string }
+```
+
+## Tool versioning with `meta`
+
+Supply a `meta` object to have `tool_version` and `tool_last_update` automatically injected into every handler result, including error paths.
+
+```typescript
+const myTool = defineTool({
+  name: "my_tool",
+  description: "Does something useful",
+  inputSchema: z.object({ id: z.string() }),
+  meta: {
+    version: "1.2.0",
+    last_update: "2025-01-15",
+  },
+  handler: async (args) => {
+    return { result: "done" };
+    // => { result: "done", tool_version: "1.2.0", tool_last_update: "2025-01-15" }
+  },
+});
+```
+
+## Built-in tools
+
+`@phake/mcp` ships two built-in tools you can use for testing and diagnostics.
+
+<CardGroup cols={2}>
+  <Card title="echo" icon="arrow-right-arrow-left">
+    Echoes a message back, optionally uppercased. Useful for verifying connectivity.
+
+    **Input:** `{ message: string, uppercase?: boolean }`
+
+    **Output:** `{ echoed: string, length: number }`
+  </Card>
+  <Card title="health" icon="heart-pulse">
+    Reports server status, runtime, and optional uptime details.
+
+    **Input:** `{ verbose?: boolean }`
+
+    **Output:** `{ status: string, timestamp: number, runtime: string, uptime?: number }`
+  </Card>
+</CardGroup>
+
+Import and register them the same way as any other tool:
+
+```typescript
+import { echoTool, healthTool } from "@phake/mcp";
+
+const server = createMCPServer({
+  adapter: "worker",
+  tools: [echoTool, healthTool, greetTool],
+});
+```

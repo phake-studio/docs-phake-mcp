@@ -1,0 +1,95 @@
+---
+title: "Node.js"
+description: "Run your MCP server on Node.js using Hono and the @phake/mcp Node.js adapter."
+---
+
+<Note>
+  The Node.js runtime adapter is **experimental**. APIs may change between releases.
+</Note>
+
+<Tip>
+  The fastest way to get a Node.js MCP server is the scaffold CLI, which generates a complete, working project:
+
+  ```bash
+  bun create @phake/mcp my-mcp-app --template node-hono --install
+  ```
+</Tip>
+
+## Manual setup
+
+<Steps>
+  <Step title="Install dependencies">
+    Install `@phake/mcp` along with its peer dependencies for the Node.js runtime:
+
+    <Tabs>
+      <Tab title="npm">
+        ```bash
+        npm install @phake/mcp hono @hono/node-server
+        ```
+      </Tab>
+      <Tab title="bun">
+        ```bash
+        bun add @phake/mcp hono @hono/node-server
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Define your tools">
+    Use `defineTool` from `@phake/mcp` to create type-safe tools with Zod schemas:
+
+    ```typescript src/tools/greet.ts
+    import { z } from "zod";
+    import { defineTool } from "@phake/mcp";
+
+    export const greetTool = defineTool({
+      name: "greet",
+      title: "Greet User",
+      description: "Returns a greeting for the given name",
+      inputSchema: z.object({
+        name: z.string().describe("Name to greet"),
+      }),
+      outputSchema: z.object({
+        message: z.string().describe("The greeting message"),
+      }),
+      handler: async (args) => {
+        return { message: `Hello, ${args.name}!` };
+      },
+    });
+    ```
+
+    Tool definitions are runtime-agnostic — the same `defineTool` call works on both Cloudflare Workers and Node.js.
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in your project root for local development:
+
+    ```ini .env
+    AUTH_STRATEGY=none
+    LOG_LEVEL=debug
+    PORT=3000
+    ```
+
+    For production, add your auth strategy variables and `RS_TOKENS_ENC_KEY`. See the [environment variables reference](/configuration/environment-variables) for the full list.
+  </Step>
+</Steps>
+
+## Node.js runtime exports
+
+The `@phake/mcp/runtime/node` package exports the following for use in Node.js projects:
+
+| Export | Description |
+|--------|-------------|
+| `buildServer(options)` | Creates an `McpServer` instance from the MCP SDK |
+| `FileTokenStore` | File-backed token store (experimental) |
+| `SqliteSessionStore` | SQLite-backed session store via Drizzle ORM (experimental) |
+
+```typescript
+import { buildServer, FileTokenStore, SqliteSessionStore } from "@phake/mcp/runtime/node";
+```
+
+See [Storage backends](/api/storage-backends) for details on the experimental stores.
+
+<Note>
+  The `node-hono` scaffold template wires up the Hono HTTP layer, auth middleware, MCP transport, and tool registration automatically. It is the recommended starting point for Node.js deployments.
+</Note>

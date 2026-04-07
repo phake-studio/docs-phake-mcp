@@ -1,0 +1,123 @@
+---
+title: "Cloudflare Workers"
+description: "Deploy your MCP server to Cloudflare Workers with KV-backed token storage and AES-256-GCM encryption."
+---
+
+<Steps>
+  <Step title="Install the package">
+    Add `@phake/mcp` to your project:
+
+    <Tabs>
+      <Tab title="npm">
+        ```bash
+        npm install @phake/mcp
+        ```
+      </Tab>
+      <Tab title="bun">
+        ```bash
+        bun add @phake/mcp
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Create the KV namespace">
+    Run the following command to create a KV namespace for token storage:
+
+    ```bash
+    wrangler kv namespace create TOKENS
+    ```
+
+    Copy the namespace ID printed in the output — you'll need it in the next step.
+  </Step>
+
+  <Step title="Bind KV in your Wrangler config">
+    Add the KV namespace binding to your Wrangler configuration file. Use the namespace ID from the previous step.
+
+    <CodeGroup>
+      ```toml wrangler.toml
+      [[kv_namespaces]]
+      binding = "TOKENS"
+      id = "<your-kv-namespace-id>"
+      ```
+
+      ```jsonc wrangler.jsonc
+      {
+        "kv_namespaces": [
+          {
+            "binding": "TOKENS",
+            "id": "<your-kv-namespace-id>"
+          }
+        ]
+      }
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Generate an encryption key">
+    Tokens at rest are encrypted with AES-256-GCM. Generate a 32-byte key using one of the following commands:
+
+    <CodeGroup>
+      ```bash openssl
+      openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+      ```
+
+      ```bash node
+      node -e "const {randomBytes}=require('crypto'); console.log(randomBytes(32).toString('base64url'))"
+      ```
+    </CodeGroup>
+
+    Save the output — you'll use it in the next step.
+  </Step>
+
+  <Step title="Set the encryption key">
+    Set `RS_TOKENS_ENC_KEY` in your environment.
+
+    **Production** — add it as a Wrangler secret so it's encrypted at rest:
+
+    ```bash
+    wrangler secret put RS_TOKENS_ENC_KEY
+    # paste the generated key when prompted
+    ```
+
+    **Local development** — add it to `.dev.vars` in your project root:
+
+    ```ini .dev.vars
+    RS_TOKENS_ENC_KEY=<your-generated-key>
+    ```
+
+    <Warning>
+      Never commit `.dev.vars` or your encryption key to version control.
+    </Warning>
+  </Step>
+
+  <Step title="Create your Worker">
+    Create your main Worker file. Import `createMCPServer` from `@phake/mcp`, define your tools, and export the server as the default export:
+
+    ```typescript src/index.ts
+    import { createMCPServer } from "@phake/mcp";
+
+    const server = createMCPServer({
+      tools: [
+        // your tool definitions
+      ],
+    });
+
+    export default server;
+    ```
+
+    <Tip>
+      Use `defineTool` to create type-safe tools with Zod input/output schemas. See the tool definition docs for the full field reference.
+    </Tip>
+  </Step>
+
+  <Step title="Deploy">
+    Deploy your Worker to Cloudflare:
+
+    ```bash
+    wrangler deploy
+    ```
+
+    Your MCP server will be available at your Worker's URL (e.g., `https://your-worker.your-subdomain.workers.dev/mcp`).
+  </Step>
+</Steps>

@@ -1,0 +1,214 @@
+---
+title: "Storage backends"
+description: "Reference for all token and session storage backends available in @phake/mcp, including KV, memory, file, and SQLite options."
+---
+
+## Overview
+
+`@phake/mcp` uses two storage abstractions:
+
+- **`TokenStore`** — stores OAuth RS-token-to-provider-token mappings, PKCE transactions, and authorization codes.
+- **`SessionStore`** — tracks active MCP sessions per API key with TTL and LRU eviction.
+
+<Note>
+  You typically do not instantiate storage backends directly.
+  `createMCPServer` calls `initializeWorkerStorage` on every request, which
+  sets up the correct backend based on the `env` bindings it receives from
+  Cloudflare Workers. See the table below for when each backend is used.
+</Note>
+
+## Available backends
+
+| Class | Implements | Import path | Runtime | Status |
+|---|---|---|---|---|
+| `KvTokenStore` | `TokenStore` | `@phake/mcp` | Cloudflare Workers | Stable |
+| `KvSessionStore` | `SessionStore` | `@phake/mcp` | Cloudflare Workers | Stable |
+| `MemoryTokenStore` | `TokenStore` | `@phake/mcp` | Any | Stable |
+| `MemorySessionStore` | `SessionStore` | `@phake/mcp` | Any | Stable |
+| `FileTokenStore` | `TokenStore` | `@phake/mcp/runtime/node` | Node.js / Bun | Experimental |
+| `SqliteSessionStore` | `SessionStore` | `@phake/mcp/runtime/node` | Node.js / Bun | Experimental |
+
+---
+
+## KV backends
+
+`KvTokenStore` and `KvSessionStore` are the production backends for Cloudflare Workers. They store data in a KV namespace with optional AES-256-GCM encryption and use an in-memory fallback for resilience when KV writes fail (e.g., quota exceeded).
+
+### Setup
+
+**1. Create the KV namespace:**
+
+```bash
+wrangler kv namespace create TOKENS
+```
+
+**2. Bind it in your Wrangler config:**
+
+<CodeGroup>
+
+```toml wrangler.toml
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "<your-kv-namespace-id>"
+```
+
+```jsonc wrangler.jsonc
+{
+  "kv_namespaces": [
+    {
+      "binding": "TOKENS",
+      "id": "<your-kv-namespace-id>"
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+**3. Generate an encryption key:**
+
+```bash
+# OpenSSL
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+
+# Node.js
+node -e "const {randomBytes}=require('crypto'); console.log(randomBytes(32).toString('base64url'))"
+```
+
+**4. Set the key:**
+
+```bash
+# Production (Wrangler secret)
+wrangler secret put RS_TOKENS_ENC_KEY
+
+# Local development (.dev.vars)
+RS_TOKENS_ENC_KEY=<your-generated-key>
+```
+
+### `KvTokenStore`
+
+```typescript
+import { KvTokenStore } from "@phake/mcp";
+
+new KvTokenStore(kv: KVNamespace, options?: {
+  encrypt?: (plaintext: string) => Promise<string> | string;
+  decrypt?: (ciphertext: string) => Promise<string> | string;
+  fallback?: MemoryTokenStore;
+})
+```
+
+Stores RS-token mappings, PKCE transactions, and authorization codes. All values are JSON-serialized and optionally encrypted before being written to KV. On write failure the in-memory fallback holds the data, so an active OAuth flow is not broken by a transient KV error.
+
+KV entries use automatic TTL expiration for transactions (10 minutes) and codes (10 minutes). RS mappings do not have a KV-level TTL — they expire via the in-memory fallback's 7-day TTL.
+
+### `KvSessionStore`
+
+```typescript
+import { KvSessionStore } from "@phake/mcp";
+
+new KvSessionStore(kv: KVNamespace, options?: {
+  encrypt?: (plaintext: string) => Promise<string> | string;
+  decrypt?: (ciphertext: string) => Promise<string> | string;
+  fallback?: MemorySessionStore;
+})
+```
+
+Stores MCP session records with a 24-hour TTL. Maintains a secondary index `session:apikey:<apiKey>` → `string[]` so sessions can be enumerated and evicted per API key. The per-API-key limit is 5 concurrent sessions (LRU eviction).
+
+---
+
+## Memory backends
+
+`MemoryTokenStore` and `MemorySessionStore` are in-process stores backed by `Map`. They are the fallback layer inside the KV backends and can also be used standalone for Node.js or testing.
+
+### `MemoryTokenStore`
+
+```typescript
+import { MemoryTokenStore } from "@phake/mcp";
+
+const store = new MemoryTokenStore();
+```
+
+- RS token TTL: 7 days
+- Transaction TTL: 10 minutes
+- Authorization code TTL: 10 minutes
+- Maximum RS token records: 10,000 (LRU eviction when exceeded)
+- Maximum transactions: 1,000 (LRU eviction)
+- Automatic cleanup: every 60 seconds (interval is unreffed — won't block process exit)
+
+### `MemorySessionStore`
+
+```typescript
+import { MemorySessionStore } from "@phake/mcp";
+
+const store = new MemorySessionStore();
+```
+
+- Session TTL: 24 hours
+- Maximum sessions (global): 10,000 (oldest evicted when exceeded)
+- Maximum sessions per API key: 5 (oldest evicted per API key)
+- Automatic cleanup: every 60 seconds
+
+---
+
+## Node.js backends (experimental)
+
+These backends are available under `@phake/mcp/runtime/node` and are intended for Node.js and Bun deployments.
+
+<Warning>
+  Both Node.js backends are **experimental**. Their APIs and behavior may
+  change in future minor versions.
+</Warning>
+
+### `FileTokenStore`
+
+```typescript
+import { FileTokenStore } from "@phake/mcp/runtime/node";
+
+new FileTokenStore(persistPath?: string, encryptionKey?: string)
+```
+
+Backed by `MemoryTokenStore` in memory with debounced persistence to a JSON file on disk. On startup, existing records are loaded and expired entries (based on `provider.expires_at`) are filtered out.
+
+- `persistPath` — path to the JSON file (e.g. `./data/tokens.json`). If omitted, data is memory-only.
+- `encryptionKey` — base64url-encoded 32-byte key for AES-256-GCM encryption. If omitted in production, tokens are written in plaintext and a warning is logged.
+- Files are written with mode `0600` (owner read/write only) and directories with `0700`.
+- Saves are debounced by 100 ms to avoid excessive disk writes.
+- Transactions and authorization codes are memory-only — they are not persisted to disk.
+
+Call `flush()` before process shutdown to force an immediate save:
+
+```typescript
+process.on("SIGTERM", async () => {
+  await store.flush();
+  process.exit(0);
+});
+```
+
+### `SqliteSessionStore`
+
+```typescript
+import { SqliteSessionStore } from "@phake/mcp/runtime/node";
+
+new SqliteSessionStore(dbPath?: string)
+// dbPath defaults to "./sessions.db"
+```
+
+Backed by SQLite via `better-sqlite3` and Drizzle ORM. Enables WAL mode for better concurrent read performance.
+
+- Per-API-key session limit: 5 (enforced atomically in a transaction at creation time).
+- No automatic TTL eviction — call `cleanup(ttlMs?)` periodically to remove stale sessions.
+- Call `close()` on graceful shutdown to release the database connection.
+
+```typescript
+const store = new SqliteSessionStore("./data/sessions.db");
+
+// Periodic cleanup (e.g., on a cron or at startup)
+const deleted = await store.cleanup(24 * 60 * 60 * 1000); // 24 hours
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  store.close();
+  process.exit(0);
+});
+```

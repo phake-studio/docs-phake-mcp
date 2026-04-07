@@ -1,0 +1,64 @@
+---
+title: "@phake/mcp"
+description: "Build MCP servers for Cloudflare Workers and Node.js with type-safe tools and built-in authentication."
+---
+
+`@phake/mcp` is a TypeScript library for building [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. It runs on Cloudflare Workers and Node.js, and gives you type-safe tool definitions, OAuth 2.1 authentication, and encrypted token storage out of the box.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="bolt" href="/quickstart">
+    Scaffold and deploy your first MCP server in minutes.
+  </Card>
+  <Card title="Define Tools" icon="wrench" href="/concepts/tools">
+    Create type-safe tools with Zod schemas and handler functions.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/concepts/authentication">
+    Add OAuth, Bearer, API Key, or custom auth to your server.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/create-mcp-server">
+    Full reference for `createMCPServer`, `defineTool`, and more.
+  </Card>
+</CardGroup>
+
+## Get started in 3 steps
+
+<Steps>
+  <Step title="Install the package">
+    Add `@phake/mcp` to your project or scaffold a new one with a single command.
+
+    ```bash
+    npm install @phake/mcp
+    # or scaffold a new project
+    bun create @phake/mcp my-mcp-app
+    ```
+  </Step>
+  <Step title="Define your tools">
+    Use `defineTool` to create typed, validated tools backed by Zod schemas.
+
+    ```typescript
+    import { z } from "zod";
+    import { defineTool } from "@phake/mcp";
+
+    const greetTool = defineTool({
+      name: "greet",
+      description: "Returns a greeting for the given name",
+      inputSchema: z.object({ name: z.string() }),
+      handler: async (args) => ({ message: `Hello, ${args.name}!` }),
+    });
+    ```
+  </Step>
+  <Step title="Create and export your server">
+    Wrap your tools in `createMCPServer` and export the result as your Worker default.
+
+    ```typescript
+    import { createMCPServer } from "@phake/mcp";
+
+    const server = createMCPServer({ tools: [greetTool] });
+    export default server;
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use the scaffold CLI to get a working project with your chosen template in seconds: `bun create @phake/mcp my-app --template cloudflare-workers --install`
+</Tip>

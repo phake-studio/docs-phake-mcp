@@ -1,0 +1,153 @@
+---
+title: "Storage"
+description: "Token and session stores that persist OAuth state and MCP sessions across requests."
+---
+
+`@phake/mcp` uses two kinds of stores:
+
+- **Token stores** (`TokenStore`) — persist RS token ↔ provider token mappings, OAuth transactions, and authorization codes. Used by the OAuth flow.
+- **Session stores** (`SessionStore`) — track active MCP sessions, their API keys, and initialization state.
+
+Both store types share the same interface regardless of backend, so you can swap between them without changing tool code.
+
+## Available backends
+
+| Backend | Kind | Use case | Notes |
+|---------|------|----------|-------|
+| `KvTokenStore` | Token | Tokens, transactions, codes | Cloudflare KV + memory fallback, AES-256-GCM encryption |
+| `KvSessionStore` | Session | Sessions | Cloudflare KV + memory fallback, AES-256-GCM encryption, API-key indexing |
+| `MemoryTokenStore` | Token | Tokens, transactions, codes | TTL expiration, 10K token limit, LRU eviction |
+| `MemorySessionStore` | Session | Sessions | TTL (24 h), 10K session limit, 5 sessions per API key |
+| `FileTokenStore` | Token | RS token mappings | File persistence, AES-256-GCM encryption — **experimental** |
+| `SqliteSessionStore` | Session | Sessions | SQLite + Drizzle ORM, WAL mode — **experimental** |
+
+---
+
+## KV backends
+
+`KvTokenStore` and `KvSessionStore` are the recommended backends for Cloudflare Workers deployments. They use the `TOKENS` KV namespace binding and encrypt every value at rest with AES-256-GCM before writing to KV.
+
+Both classes use an in-memory `MemoryTokenStore` / `MemorySessionStore` as a write-through fallback. If a KV write fails (for example, due to quota), the data remains accessible in memory for the lifetime of the Worker instance.
+
+### KvTokenStore
+
+Stores RS token mappings, OAuth transactions, and authorization codes in Cloudflare KV.
+
+<Note>
+`createMCPServer` wires up `KvTokenStore` automatically from your environment bindings. You only need to reference it directly if you are building a custom server assembly.
+</Note>
+
+Token entries use automatic KV TTL expiration: transactions and authorization codes expire after 10 minutes.
+
+### KvSessionStore
+
+Stores MCP session records in Cloudflare KV with a 24-hour TTL. Maintains a secondary index so sessions can be looked up by API key. Enforces a limit of 5 active sessions per API key, evicting the least-recently-accessed session when the limit is exceeded.
+
+### Encryption
+
+Both KV backends encrypt every value with AES-256-GCM when `RS_TOKENS_ENC_KEY` is set in your environment. To generate a 32-byte key:
+
+<CodeGroup>
+
+```bash OpenSSL
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+```
+
+```bash Node.js
+node -e "const {randomBytes}=require('crypto'); console.log(randomBytes(32).toString('base64url'))"
+```
+
+</CodeGroup>
+
+Set the key as a Wrangler secret in production:
+
+```bash
+wrangler secret put RS_TOKENS_ENC_KEY
+# paste the generated key when prompted
+```
+
+Or add it to `.dev.vars` for local development:
+
+```ini
+RS_TOKENS_ENC_KEY=<your-generated-key>
+```
+
+---
+
+## Memory backends
+
+`MemoryTokenStore` and `MemorySessionStore` store data in process memory. They are suitable for local development, testing, and Node.js deployments where you don't need cross-instance persistence.
+
+<Warning>
+Memory backends do not survive process restarts. All tokens and sessions are lost when the process exits. Do not use them as the sole storage layer in production if session persistence is required.
+</Warning>
+
+Both classes run a cleanup interval every 60 seconds to remove expired entries.
+
+### MemoryTokenStore
+
+| Limit | Value |
+|-------|-------|
+| Maximum RS token records | 10,000 |
+| Maximum concurrent transactions | 1,000 |
+| RS token TTL | 7 days |
+| Transaction TTL | 10 minutes |
+| Authorization code TTL | 10 minutes |
+| Eviction policy | LRU (oldest entries removed first when limit reached) |
+
+### MemorySessionStore
+
+| Limit | Value |
+|-------|-------|
+| Maximum total sessions | 10,000 |
+| Maximum sessions per API key | 5 |
+| Session TTL | 24 hours |
+| Eviction policy | LRU (least-recently-accessed session evicted per API key when limit reached) |
+
+---
+
+## Experimental backends
+
+<Note>
+The following backends are marked **experimental**. Their APIs may change between minor versions.
+</Note>
+
+### FileTokenStore
+
+Persists RS token mappings to a JSON file on disk with AES-256-GCM encryption. Intended for Node.js deployments that need simple token persistence without a database.
+
+Configure the file path with `RS_TOKENS_FILE`:
+
+```ini
+RS_TOKENS_FILE=./data/tokens.enc
+RS_TOKENS_ENC_KEY=<your-key>
+```
+
+### SqliteSessionStore
+
+Stores sessions in a SQLite database using Drizzle ORM in WAL mode. Provides durable session persistence for Node.js deployments with better concurrency than the file-based store.
+
+Import from the Node.js runtime package:
+
+```typescript
+import { SqliteSessionStore } from "@phake/mcp/runtime/node";
+```
+
+---
+
+## Choosing a backend
+
+<CardGroup cols={2}>
+  <Card title="Cloudflare Workers" icon="cloud">
+    Use `KvTokenStore` + `KvSessionStore`. Bind a KV namespace named `TOKENS` and set `RS_TOKENS_ENC_KEY`. The scaffolded templates configure this for you.
+  </Card>
+  <Card title="Node.js (development)" icon="circle-play">
+    Use `MemoryTokenStore` + `MemorySessionStore`. No configuration needed — data lives in process memory.
+  </Card>
+  <Card title="Node.js (production)" icon="server">
+    Use `FileTokenStore` (experimental) for tokens and `SqliteSessionStore` (experimental) for sessions, or integrate your own stores by implementing the `TokenStore` and `SessionStore` interfaces.
+  </Card>
+  <Card title="Custom backend" icon="wrench">
+    Implement the `TokenStore` and/or `SessionStore` interfaces from `@phake/mcp` to use any storage system you choose.
+  </Card>
+</CardGroup>

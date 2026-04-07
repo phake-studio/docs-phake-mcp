@@ -1,0 +1,78 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "@phake/mcp",
+  "theme": "mint",
+  "favicon": "https://media.brand.dev/ee9105b0-8d0c-41e8-bbf7-cf4889b3b518.png",
+  "logo": {
+    "light": "https://media.brand.dev/22a2a9f0-c94f-4bb0-b1d1-a8399e8d4538.svg",
+    "dark": "https://media.brand.dev/22a2a9f0-c94f-4bb0-b1d1-a8399e8d4538.svg"
+  },
+  "colors": {
+    "primary": "#241c24",
+    "light": "#f4f4f4",
+    "dark": "#cb0404"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/fuongz/phake-mcp"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/tools",
+              "concepts/authentication",
+              "concepts/storage"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/cloudflare-workers",
+              "guides/nodejs",
+              "guides/client-configuration",
+              "guides/oauth-setup"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/auth-strategies"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API",
+            "pages": [
+              "api/create-mcp-server",
+              "api/define-tool",
+              "api/tool-context",
+              "api/storage-backends",
+              "api/endpoints"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "description": "A TypeScript library for building MCP (Model Context Protocol) servers - works on both Cloudflare Workers and Node.js."
+}

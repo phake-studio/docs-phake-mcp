@@ -1,0 +1,248 @@
+---
+title: "Environment variables"
+description: "Complete reference for all environment variables used to configure your @phake/mcp server."
+---
+
+All configuration is read from environment variables or Wrangler bindings at startup. There are no config files to edit — set the variables below for your runtime and the server picks them up automatically.
+
+## Core variables
+
+<ParamField path="TOKENS" type="KV namespace binding" required>
+  Cloudflare KV namespace binding used for token and session storage. This is a Wrangler binding, not a plain string.
+
+  See [Binding the KV namespace](#binding-the-kv-namespace) below for setup instructions.
+</ParamField>
+
+<ParamField path="RS_TOKENS_ENC_KEY" type="string" required>
+  Base64url-encoded 32-byte key used to encrypt tokens at rest with AES-256-GCM. Generate one before deploying.
+
+  ```bash
+  # OpenSSL
+  openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+
+  # Node.js
+  node -e "const {randomBytes}=require('crypto'); console.log(randomBytes(32).toString('base64url'))"
+  ```
+</ParamField>
+
+## Auth variable
+
+<ParamField path="AUTH_STRATEGY" type="string">
+  The authentication strategy to use. Accepted values: `oauth`, `bearer`, `api_key`, `custom`, `none`.
+
+  If you omit this variable, the server infers it automatically based on which other variables are present:
+
+  | Condition | Inferred strategy |
+  |-----------|-------------------|
+  | `AUTH_ENABLED=true` | `oauth` |
+  | `API_KEY` is set | `api_key` |
+  | `BEARER_TOKEN` is set | `bearer` |
+  | None of the above | `none` |
+
+  Set it explicitly when you want to override inference or be explicit in your config.
+</ParamField>
+
+## OAuth-specific variables
+
+These variables are required when `AUTH_STRATEGY=oauth`.
+
+<ParamField path="OAUTH_CLIENT_ID" type="string">
+  OAuth client ID registered with your authorization server.
+</ParamField>
+
+<ParamField path="OAUTH_CLIENT_SECRET" type="string">
+  OAuth client secret. Store this as a Wrangler secret, never in plain text.
+</ParamField>
+
+<ParamField path="OAUTH_SCOPES" type="string">
+  Space-separated list of OAuth scopes to request (e.g., `openid profile email`).
+</ParamField>
+
+<ParamField path="OAUTH_REDIRECT_URI" type="string" default="http://localhost:3000/callback">
+  Redirect URI registered with your OAuth provider. Must use HTTPS in production.
+
+  <Warning>
+    Using an HTTP redirect URI in production transmits OAuth tokens insecurely. Always use HTTPS for deployed servers.
+  </Warning>
+</ParamField>
+
+<ParamField path="OAUTH_AUTHORIZATION_URL" type="string">
+  Authorization endpoint URL of your OAuth provider (e.g., `https://accounts.google.com/o/oauth2/v2/auth`).
+</ParamField>
+
+<ParamField path="OAUTH_TOKEN_URL" type="string">
+  Token endpoint URL of your OAuth provider (e.g., `https://oauth2.googleapis.com/token`).
+</ParamField>
+
+<ParamField path="OAUTH_REVOCATION_URL" type="string">
+  Token revocation endpoint URL. Used when clients call `/revoke`.
+</ParamField>
+
+<ParamField path="OAUTH_REDIRECT_ALLOWLIST" type="string">
+  Comma-separated list of allowed redirect URIs for dynamic client registration. Restricts which redirect URIs clients may register.
+</ParamField>
+
+<ParamField path="OAUTH_REDIRECT_ALLOW_ALL" type="boolean" default="false">
+  When `true`, any redirect URI is accepted. **Never enable this in production** — it introduces an open redirect vulnerability.
+
+  <Warning>
+    Setting `OAUTH_REDIRECT_ALLOW_ALL=true` in a production environment is a security risk. The server logs a warning if it detects this combination.
+  </Warning>
+</ParamField>
+
+<ParamField path="OAUTH_EXTRA_AUTH_PARAMS" type="string">
+  Extra query parameters to append to the authorization URL, in `key=value&key2=value2` format. Useful for provider-specific requirements (e.g., `access_type=offline&prompt=consent` for Google).
+</ParamField>
+
+<ParamField path="PROVIDER_CLIENT_ID" type="string">
+  Client ID for the upstream provider (the service your MCP server proxies, e.g., a Google API client ID). Separate from `OAUTH_CLIENT_ID`, which is your MCP server's own OAuth identity.
+</ParamField>
+
+<ParamField path="PROVIDER_CLIENT_SECRET" type="string">
+  Client secret for the upstream provider.
+</ParamField>
+
+<ParamField path="PROVIDER_API_URL" type="string">
+  Base URL for the upstream provider's API.
+</ParamField>
+
+<ParamField path="PROVIDER_ACCOUNTS_URL" type="string">
+  Accounts or user-info endpoint for the upstream provider (e.g., `https://www.googleapis.com/oauth2/v1/userinfo`).
+</ParamField>
+
+## Bearer token variables
+
+<ParamField path="BEARER_TOKEN" type="string">
+  Static bearer token value. Required when `AUTH_STRATEGY=bearer`. The server injects this as `Authorization: Bearer <value>` on every tool call.
+</ParamField>
+
+## API key variables
+
+<ParamField path="API_KEY" type="string">
+  Static API key value. Required when `AUTH_STRATEGY=api_key`.
+</ParamField>
+
+<ParamField path="API_KEY_HEADER" type="string" default="x-api-key">
+  Name of the request header used to pass the API key (e.g., `x-api-key`, `X-Custom-Key`).
+</ParamField>
+
+## Custom headers variable
+
+<ParamField path="CUSTOM_HEADERS" type="string">
+  Arbitrary request headers to inject, in `Header-Name:value,Header-Name2:value2` format. Required when `AUTH_STRATEGY=custom`.
+
+  ```ini
+  CUSTOM_HEADERS=X-Workspace-Id:ws_abc123,X-Tenant:acme
+  ```
+</ParamField>
+
+## Other variables
+
+<ParamField path="BASE_URL" type="string">
+  Override for the server's public base URL. Set this when your server runs behind a reverse proxy that terminates TLS, so OAuth redirects and discovery documents use the correct external URL (e.g., `https://my-mcp.example.com`).
+</ParamField>
+
+<ParamField path="LOG_LEVEL" type="string" default="info">
+  Minimum log level to emit. Accepted values: `debug`, `info`, `warning`, `error`.
+</ParamField>
+
+<ParamField path="HOST" type="string" default="127.0.0.1">
+  Host address for the Node.js server to bind to.
+</ParamField>
+
+<ParamField path="PORT" type="number" default="3000">
+  Port for the Node.js server to listen on.
+</ParamField>
+
+<ParamField path="RPS_LIMIT" type="number" default="10">
+  Maximum requests per second allowed per client before rate limiting kicks in.
+</ParamField>
+
+<ParamField path="CONCURRENCY_LIMIT" type="number" default="5">
+  Maximum number of concurrent in-flight requests per client.
+</ParamField>
+
+---
+
+## Setting variables by runtime
+
+<Tabs>
+  <Tab title="Cloudflare Workers">
+    Use Wrangler secrets for sensitive values and `.dev.vars` for local development.
+
+    **Production — add secrets:**
+
+    ```bash
+    wrangler secret put RS_TOKENS_ENC_KEY
+    wrangler secret put OAUTH_CLIENT_SECRET
+    wrangler secret put BEARER_TOKEN
+    ```
+
+    **Local development — `.dev.vars`:**
+
+    ```ini .dev.vars
+    RS_TOKENS_ENC_KEY=<your-generated-key>
+    AUTH_STRATEGY=bearer
+    BEARER_TOKEN=my-local-token
+    LOG_LEVEL=debug
+    ```
+
+    <Note>
+      `.dev.vars` is the Wrangler equivalent of `.env`. Add it to `.gitignore` — it holds secrets.
+    </Note>
+  </Tab>
+  <Tab title="Node.js">
+    Use a `.env` file at the project root or inject variables from your process manager / CI environment.
+
+    ```ini .env
+    RS_TOKENS_ENC_KEY=<your-generated-key>
+    AUTH_STRATEGY=bearer
+    BEARER_TOKEN=my-local-token
+    HOST=127.0.0.1
+    PORT=3000
+    LOG_LEVEL=info
+    ```
+
+    Load it with your preferred method (`dotenv`, native Node.js `--env-file`, etc.).
+  </Tab>
+</Tabs>
+
+---
+
+## Binding the KV namespace
+
+`TOKENS` is a Cloudflare KV namespace, not a plain environment variable. You bind it in your Wrangler config.
+
+<Steps>
+  <Step title="Create the namespace">
+    ```bash
+    wrangler kv namespace create TOKENS
+    ```
+
+    Copy the namespace ID printed in the output.
+  </Step>
+  <Step title="Add the binding to wrangler.toml">
+    ```toml wrangler.toml
+    [[kv_namespaces]]
+    binding = "TOKENS"
+    id = "<your-kv-namespace-id>"
+    ```
+
+    Or in `wrangler.jsonc`:
+
+    ```jsonc wrangler.jsonc
+    {
+      "kv_namespaces": [
+        {
+          "binding": "TOKENS",
+          "id": "<your-kv-namespace-id>"
+        }
+      ]
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The KV namespace binding is only needed for Cloudflare Workers deployments. The Node.js adapter uses in-memory storage by default.
+</Note>

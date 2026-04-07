@@ -1,0 +1,370 @@
+---
+title: "Auth strategies"
+description: "How to configure each of the five authentication strategies in @phake/mcp: oauth, bearer, api_key, custom, and none."
+---
+
+`@phake/mcp` supports five authentication strategies. Set `AUTH_STRATEGY` in your environment to pick one explicitly, or let the server infer it automatically from whichever variables are present.
+
+## Automatic inference
+
+If you do not set `AUTH_STRATEGY`, the server inspects your environment and picks the best match:
+
+| Condition | Strategy selected |
+|-----------|-------------------|
+| `AUTH_ENABLED=true` | `oauth` |
+| `API_KEY` is set | `api_key` |
+| `BEARER_TOKEN` is set | `bearer` |
+| None of the above | `none` |
+
+Set `AUTH_STRATEGY` explicitly when you want deterministic behaviour regardless of which other variables happen to be set.
+
+---
+
+## Strategy reference
+
+<AccordionGroup>
+
+  <Accordion title="oauth — Full OAuth 2.1 PKCE flow" icon="lock" defaultOpen={false}>
+
+    ### When to use it
+
+    Use `oauth` when you want end-users to authenticate with a third-party provider (Google, GitHub, etc.) through a full browser-based OAuth 2.1 PKCE flow. The server issues its own RS (Resource Server) tokens and maps them to provider access tokens stored in KV.
+
+    ### Required environment variables
+
+    | Variable | Description |
+    |----------|-------------|
+    | `OAUTH_CLIENT_ID` | Your MCP server's OAuth client ID |
+    | `OAUTH_CLIENT_SECRET` | Your MCP server's OAuth client secret |
+    | `OAUTH_SCOPES` | Space-separated scopes (e.g., `openid profile email`) |
+    | `OAUTH_REDIRECT_URI` | Redirect URI registered with your provider |
+    | `OAUTH_AUTHORIZATION_URL` | Provider authorization endpoint |
+    | `OAUTH_TOKEN_URL` | Provider token endpoint |
+    | `PROVIDER_CLIENT_ID` | Upstream provider client ID |
+    | `PROVIDER_CLIENT_SECRET` | Upstream provider client secret |
+    | `PROVIDER_ACCOUNTS_URL` | Provider user-info / accounts endpoint |
+    | `TOKENS` | Cloudflare KV binding for token storage |
+    | `RS_TOKENS_ENC_KEY` | AES-256-GCM encryption key for tokens at rest |
+
+    ### Tool context
+
+    When `AUTH_STRATEGY=oauth`, successful authentication populates the tool context with:
+
+    - `context.providerToken` — the mapped provider access token (e.g., Google access token)
+    - `context.resolvedHeaders` — pre-built headers with `Authorization: Bearer <providerToken>`
+    - `context.provider` — provider info object (`accessToken`, `refreshToken`, `expiresAt`)
+    - `context.authStrategy` — `"oauth"`
+
+    ### Example tool
+
+    ```typescript
+    import { defineTool, assertProviderToken } from "@phake/mcp";
+
+    const getProfileTool = defineTool({
+      name: "get_profile",
+      description: "Fetch the authenticated user's profile from the provider",
+      inputSchema: z.object({}),
+      requiresAuth: true,
+      handler: async (_args, context) => {
+        assertProviderToken(context); // throws if token is missing
+        const response = await fetch("https://www.googleapis.com/oauth2/v1/userinfo", {
+          headers: context.resolvedHeaders,
+        });
+        return await response.json();
+      },
+    });
+    ```
+
+    ### Example environment setup
+
+    ```ini .dev.vars
+    AUTH_STRATEGY=oauth
+    OAUTH_CLIENT_ID=my-mcp-client-id
+    OAUTH_CLIENT_SECRET=my-mcp-client-secret
+    OAUTH_SCOPES=openid profile email
+    OAUTH_REDIRECT_URI=http://localhost:3000/oauth/callback
+    OAUTH_AUTHORIZATION_URL=https://accounts.google.com/o/oauth2/v2/auth
+    OAUTH_TOKEN_URL=https://oauth2.googleapis.com/token
+    PROVIDER_CLIENT_ID=google-provider-client-id
+    PROVIDER_CLIENT_SECRET=google-provider-client-secret
+    PROVIDER_ACCOUNTS_URL=https://www.googleapis.com/oauth2/v1/userinfo
+    RS_TOKENS_ENC_KEY=<your-generated-key>
+    ```
+
+    <Tip>
+      For Google OAuth, set `OAUTH_EXTRA_AUTH_PARAMS=access_type=offline&prompt=consent` to receive a refresh token.
+    </Tip>
+
+  </Accordion>
+
+  <Accordion title="bearer — Static bearer token" icon="key" defaultOpen={false}>
+
+    ### When to use it
+
+    Use `bearer` for server-to-server integrations where a single long-lived token authenticates all requests. There is no user login flow — the token is read from `BEARER_TOKEN` and injected into every tool call.
+
+    ### Required environment variables
+
+    | Variable | Description |
+    |----------|-------------|
+    | `BEARER_TOKEN` | The static bearer token value |
+
+    ### Tool context
+
+    - `context.providerToken` — the value of `BEARER_TOKEN`
+    - `context.resolvedHeaders` — `{ Authorization: "Bearer <BEARER_TOKEN>" }`
+    - `context.authStrategy` — `"bearer"`
+
+    ### Example tool
+
+    ```typescript
+    import { defineTool } from "@phake/mcp";
+
+    const listItemsTool = defineTool({
+      name: "list_items",
+      description: "List items from the API",
+      inputSchema: z.object({ page: z.number().default(1) }),
+      requiresAuth: true,
+      handler: async (args, context) => {
+        const response = await fetch(`https://api.example.com/items?page=${args.page}`, {
+          headers: context.resolvedHeaders,
+        });
+        return await response.json();
+      },
+    });
+    ```
+
+    ### Example environment setup
+
+    <CodeGroup>
+
+    ```ini .dev.vars (Cloudflare)
+    AUTH_STRATEGY=bearer
+    BEARER_TOKEN=my-static-api-token
+    ```
+
+    ```ini .env (Node.js)
+    AUTH_STRATEGY=bearer
+    BEARER_TOKEN=my-static-api-token
+    ```
+
+    </CodeGroup>
+
+  </Accordion>
+
+  <Accordion title="api_key — Static API key header" icon="shield" defaultOpen={false}>
+
+    ### When to use it
+
+    Use `api_key` when the upstream service authenticates via a custom header (e.g., `x-api-key`) rather than a standard `Authorization` header. The key is read from `API_KEY` and injected under the header named by `API_KEY_HEADER`.
+
+    ### Required environment variables
+
+    | Variable | Description | Default |
+    |----------|-------------|---------|
+    | `API_KEY` | The static API key value | — |
+    | `API_KEY_HEADER` | Header name to send the key in | `x-api-key` |
+
+    ### Tool context
+
+    - `context.providerToken` — the value of `API_KEY`
+    - `context.resolvedHeaders` — `{ "<API_KEY_HEADER>": "<API_KEY>" }`
+    - `context.authStrategy` — `"api_key"`
+
+    ### Example tool
+
+    ```typescript
+    import { defineTool } from "@phake/mcp";
+
+    const searchTool = defineTool({
+      name: "search",
+      description: "Search the knowledge base",
+      inputSchema: z.object({ query: z.string() }),
+      requiresAuth: true,
+      handler: async (args, context) => {
+        const response = await fetch("https://api.example.com/search", {
+          method: "POST",
+          headers: {
+            ...context.resolvedHeaders,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ q: args.query }),
+        });
+        return await response.json();
+      },
+    });
+    ```
+
+    ### Example environment setup
+
+    <CodeGroup>
+
+    ```ini .dev.vars (Cloudflare)
+    AUTH_STRATEGY=api_key
+    API_KEY=sk-live-abc123
+    API_KEY_HEADER=x-api-key
+    ```
+
+    ```ini .env (Node.js)
+    AUTH_STRATEGY=api_key
+    API_KEY=sk-live-abc123
+    API_KEY_HEADER=x-api-key
+    ```
+
+    </CodeGroup>
+
+  </Accordion>
+
+  <Accordion title="custom — Arbitrary request headers" icon="sliders" defaultOpen={false}>
+
+    ### When to use it
+
+    Use `custom` when the upstream service requires multiple non-standard headers (e.g., workspace IDs, tenant identifiers, or proprietary auth schemes). All headers are defined in a single `CUSTOM_HEADERS` variable and injected verbatim into every tool call.
+
+    ### Required environment variables
+
+    | Variable | Description |
+    |----------|-------------|
+    | `CUSTOM_HEADERS` | Comma-separated `Header-Name:value` pairs |
+
+    **Format:** `Header-Name:value,Another-Header:value2`
+
+    ### Tool context
+
+    - `context.providerToken` — `undefined` (no single token concept)
+    - `context.resolvedHeaders` — all parsed custom headers as a plain object
+    - `context.authStrategy` — `"custom"`
+
+    ### Example tool
+
+    ```typescript
+    import { defineTool } from "@phake/mcp";
+
+    const getWorkspaceTool = defineTool({
+      name: "get_workspace",
+      description: "Fetch workspace details",
+      inputSchema: z.object({ workspaceId: z.string() }),
+      handler: async (args, context) => {
+        const response = await fetch(
+          `https://api.example.com/workspaces/${args.workspaceId}`,
+          { headers: context.resolvedHeaders },
+        );
+        return await response.json();
+      },
+    });
+    ```
+
+    ### Example environment setup
+
+    <CodeGroup>
+
+    ```ini .dev.vars (Cloudflare)
+    AUTH_STRATEGY=custom
+    CUSTOM_HEADERS=X-Workspace-Id:ws_abc123,X-Tenant:acme,X-Version:2
+    ```
+
+    ```ini .env (Node.js)
+    AUTH_STRATEGY=custom
+    CUSTOM_HEADERS=X-Workspace-Id:ws_abc123,X-Tenant:acme,X-Version:2
+    ```
+
+    </CodeGroup>
+
+  </Accordion>
+
+  <Accordion title="none — No authentication" icon="circle-slash" defaultOpen={false}>
+
+    ### When to use it
+
+    Use `none` for public tools that do not call authenticated APIs, or during local development before you configure a real auth strategy. All tools remain accessible without any token.
+
+    ### Required environment variables
+
+    None.
+
+    ### Tool context
+
+    - `context.providerToken` — `undefined`
+    - `context.resolvedHeaders` — `{}` (empty)
+    - `context.authStrategy` — `"none"`
+
+    ### Example tool
+
+    ```typescript
+    import { defineTool } from "@phake/mcp";
+
+    const greetTool = defineTool({
+      name: "greet",
+      description: "Returns a greeting",
+      inputSchema: z.object({ name: z.string() }),
+      handler: async (args) => {
+        return { message: `Hello, ${args.name}!` };
+      },
+    });
+    ```
+
+    ### Example environment setup
+
+    <CodeGroup>
+
+    ```ini .dev.vars (Cloudflare)
+    AUTH_STRATEGY=none
+    ```
+
+    ```ini .env (Node.js)
+    AUTH_STRATEGY=none
+    ```
+
+    </CodeGroup>
+
+    <Note>
+      You can omit `AUTH_STRATEGY` entirely and leave `API_KEY` and `BEARER_TOKEN` unset — the server defaults to `none` automatically.
+    </Note>
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Summary table
+
+| Strategy | Set `AUTH_STRATEGY` to | Required variables | `context.providerToken` | `context.resolvedHeaders` |
+|----------|------------------------|-------------------|------------------------|--------------------------|
+| `oauth` | `oauth` | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OAUTH_SCOPES`, `OAUTH_REDIRECT_URI`, `OAUTH_AUTHORIZATION_URL`, `OAUTH_TOKEN_URL`, `PROVIDER_CLIENT_ID`, `PROVIDER_CLIENT_SECRET`, `PROVIDER_ACCOUNTS_URL` | Mapped provider token | `Authorization: Bearer <token>` |
+| `bearer` | `bearer` | `BEARER_TOKEN` | Value of `BEARER_TOKEN` | `Authorization: Bearer <BEARER_TOKEN>` |
+| `api_key` | `api_key` | `API_KEY` | Value of `API_KEY` | `<API_KEY_HEADER>: <API_KEY>` |
+| `custom` | `custom` | `CUSTOM_HEADERS` | `undefined` | All parsed custom headers |
+| `none` | `none` | — | `undefined` | `{}` |
+
+---
+
+## Using `assertProviderToken`
+
+When a tool requires a token to function, use the `assertProviderToken` helper instead of writing a manual `if` check. It throws an `"Authentication required"` error if `context.providerToken` is absent, and narrows the TypeScript type to `string` for the rest of the handler.
+
+```typescript
+import { defineTool, assertProviderToken } from "@phake/mcp";
+
+const myTool = defineTool({
+  name: "my_tool",
+  description: "Does something that requires auth",
+  inputSchema: z.object({}),
+  requiresAuth: true, // dispatcher rejects unauthenticated calls before handler runs
+  handler: async (_args, context) => {
+    assertProviderToken(context);
+    // context.providerToken is typed as `string` here
+
+    const response = await fetch("https://api.example.com/resource", {
+      headers: context.resolvedHeaders,
+    });
+    return await response.json();
+  },
+});
+```
+
+<Note>
+  `requiresAuth: true` and `assertProviderToken` serve different purposes. `requiresAuth` causes the dispatcher to reject unauthenticated requests before the handler is called. `assertProviderToken` is a type guard inside the handler that makes TypeScript aware the token is guaranteed to be a string.
+</Note>
+
+Setting `requiresAuth: true` is the recommended way to protect a tool. Use `assertProviderToken` in addition when you need the narrowed TypeScript type, or in tools that call helper functions that expect a `string` rather than `string | undefined`.

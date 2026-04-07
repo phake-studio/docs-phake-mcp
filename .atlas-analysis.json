@@ -1,0 +1,100 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "@phake/mcp",
+  "projectDescription": "A TypeScript library for building MCP (Model Context Protocol) servers that run on Cloudflare Workers and Node.js, with built-in authentication, OAuth 2.1, and type-safe tool definitions.",
+  "theme": "luma",
+  "primaryColor": "#241c24",
+  "lightColor": "#f4f4f4",
+  "darkColor": "#cb0404",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/tools",
+              "concepts/authentication",
+              "concepts/storage"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/cloudflare-workers",
+              "guides/nodejs",
+              "guides/client-configuration",
+              "guides/oauth-setup"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/auth-strategies"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API",
+            "pages": [
+              "api/create-mcp-server",
+              "api/define-tool",
+              "api/tool-context",
+              "api/storage-backends",
+              "api/endpoints"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Type-safe tool definitions with Zod schema validation",
+    "Cloudflare Workers and Node.js runtime support",
+    "Built-in OAuth 2.1 PKCE authentication flow",
+    "Multiple auth strategies: OAuth, Bearer, API Key, Custom, None",
+    "AES-256-GCM encrypted token storage via Cloudflare KV",
+    "Scaffold CLI to bootstrap new MCP server projects",
+    "Built-in echo and health check tools",
+    "MCP SSE and HTTP transports with session management",
+    "Cancellation support via AbortSignal",
+    "Structured output with automatic JSON wrapping"
+  ],
+  "publicApiSurface": [
+    "createMCPServer(options: MCPServerOptions): MCPServer",
+    "defineTool(def: ToolDefinitionInput): SharedToolDefinition",
+    "toolFail(defaults): (error: string) => T & { error: string }",
+    "assertProviderToken(context: ToolContext): asserts providerToken is string",
+    "KvTokenStore",
+    "KvSessionStore",
+    "MemoryTokenStore",
+    "MemorySessionStore",
+    "FileTokenStore (experimental)",
+    "SqliteSessionStore (experimental)",
+    "ToolContext interface",
+    "AuthenticatedToolContext interface",
+    "ToolResult interface",
+    "SharedToolDefinition interface",
+    "GET /mcp - SSE stream initialization",
+    "POST /mcp - JSON-RPC message handling",
+    "DELETE /mcp - Session termination",
+    "GET /health - Health check",
+    "/.well-known/oauth-authorization-server",
+    "/authorize, /token, /oauth/callback, /revoke, /register",
+    "bun create @phake/mcp - scaffold CLI"
+  ]
+}

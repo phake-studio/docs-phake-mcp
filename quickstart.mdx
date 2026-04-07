@@ -1,0 +1,112 @@
+---
+title: "Quick start"
+description: "Scaffold a new MCP server in seconds, or follow the manual setup path to add @phake/mcp to an existing project."
+---
+
+## Scaffold a new project
+
+The fastest way to get started is the scaffold CLI. It creates a new project from a template and optionally installs dependencies.
+
+```bash
+# Interactive — prompts for template name
+bun create @phake/mcp
+
+# Non-interactive — specify template and install dependencies
+bun create @phake/mcp my-mcp-app --template cloudflare-workers --install
+```
+
+### Available templates
+
+| Template | Description |
+|----------|-------------|
+| `cloudflare-workers` | Cloudflare Workers + Hono (default) |
+| `cloudflare-workers-google` | Cloudflare Workers + Google OAuth |
+| `node-hono` | Node.js + Bun + Hono |
+
+If you run `bun create @phake/mcp` without a `--template` flag, an interactive prompt appears and defaults to `cloudflare-workers`.
+
+### CLI options
+
+| Option | Description |
+|--------|-------------|
+| `-t, --template` | Template name |
+| `-i, --install` | Auto-install dependencies after scaffolding |
+| `-p, --pm` | Package manager to use: `npm`, `bun`, `yarn`, or `pnpm` |
+
+---
+
+## Manual setup
+
+If you prefer to add `@phake/mcp` to an existing project, follow these steps.
+
+<Steps>
+  <Step title="Install the package">
+    Add `@phake/mcp` to your project using your preferred package manager.
+
+    ```bash
+    npm install @phake/mcp
+    # or
+    bun add @phake/mcp
+    ```
+  </Step>
+
+  <Step title="Define a tool">
+    Use `defineTool` to create a type-safe tool. Provide a Zod schema for the
+    input and a handler function that returns a result.
+
+    ```typescript
+    import { z } from "zod";
+    import { defineTool } from "@phake/mcp";
+
+    const greetTool = defineTool({
+      name: "greet",
+      title: "Greet User",
+      description: "Returns a greeting for the given name",
+      inputSchema: z.object({
+        name: z.string().describe("Name to greet"),
+      }),
+      outputSchema: z.object({
+        message: z.string().describe("The greeting message"),
+      }),
+      handler: async (args) => {
+        return { message: `Hello, ${args.name}!` };
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Create the server">
+    Pass your tools to `createMCPServer`. For a Cloudflare Workers deployment,
+    set `adapter` to `"worker"` and export the server as the module default.
+
+    ```typescript
+    import { createMCPServer } from "@phake/mcp";
+
+    const server = createMCPServer({
+      tools: [greetTool],
+    });
+
+    export default server;
+    ```
+  </Step>
+
+  <Step title="Deploy">
+    For Cloudflare Workers, deploy with Wrangler:
+
+    ```bash
+    wrangler deploy
+    ```
+
+    For Node.js, start the server with Bun or Node:
+
+    ```bash
+    bun run src/index.ts
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Cloudflare Workers deployments require a KV namespace for token storage and an
+  AES-256-GCM encryption key. See the [Cloudflare Workers guide](/guides/cloudflare-workers)
+  for the full setup walkthrough.
+</Note>

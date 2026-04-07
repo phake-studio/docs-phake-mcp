@@ -1,0 +1,113 @@
+---
+title: "createMCPServer"
+description: "Factory function that creates a fully configured MCP server instance for Cloudflare Workers."
+---
+
+## Overview
+
+`createMCPServer` is the main entry point for building an MCP server. It wires together your tool definitions, storage backends, authentication strategy, and HTTP routing into a single object that Cloudflare Workers can export directly.
+
+```typescript
+function createMCPServer(options: MCPServerOptions): MCPServer
+```
+
+<Note>
+  Cloudflare Workers is the primary supported runtime. The returned `MCPServer`
+  object exposes a `fetch` method that matches the Workers module export
+  interface, so you can use `export default` directly.
+</Note>
+
+## Parameters
+
+<ParamField body="options" type="MCPServerOptions" required>
+  Configuration object for the server.
+
+  <Expandable title="MCPServerOptions fields">
+    <ParamField body="tools" type="SharedToolDefinition[]">
+      Array of tool definitions to register with the server. Create tools with
+      [`defineTool`](/api/define-tool). If omitted, the server starts with no
+      tools registered (useful for testing connectivity).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return value
+
+Returns an `MCPServer` object:
+
+```typescript
+interface MCPServer {
+  fetch: (request: Request, env: unknown) => Promise<Response>;
+}
+```
+
+The `fetch` method is called by the Workers runtime on every incoming request. It reads environment variables from `env`, initializes storage (KV with memory fallback), parses the active auth strategy, and routes the request to the appropriate handler.
+
+## Usage
+
+### Basic server
+
+```typescript
+import { createMCPServer, defineTool } from "@phake/mcp";
+import { z } from "zod";
+
+const greetTool = defineTool({
+  name: "greet",
+  description: "Returns a greeting for the given name",
+  inputSchema: z.object({
+    name: z.string().describe("Name to greet"),
+  }),
+  handler: async (args) => {
+    return { message: `Hello, ${args.name}!` };
+  },
+});
+
+const server = createMCPServer({
+  tools: [greetTool],
+});
+
+export default server;
+```
+
+### With multiple tools
+
+```typescript
+import { createMCPServer } from "@phake/mcp";
+import { greetTool } from "./tools/greet";
+import { profileTool } from "./tools/profile";
+import { searchTool } from "./tools/search";
+
+const server = createMCPServer({
+  tools: [greetTool, profileTool, searchTool],
+});
+
+export default server;
+```
+
+## Environment variables
+
+`createMCPServer` reads all configuration from the Worker's `env` object at request time. The following bindings and variables are used:
+
+| Variable | Required | Description |
+|---|---|---|
+| `TOKENS` | Yes | Cloudflare KV namespace binding for token and session storage |
+| `RS_TOKENS_ENC_KEY` | Yes (production) | Base64url-encoded 32-byte AES-256-GCM encryption key |
+| `AUTH_STRATEGY` | No | `oauth` \| `bearer` \| `api_key` \| `custom` \| `none` (inferred if unset) |
+
+<Warning>
+  If the `TOKENS` KV namespace binding is missing, the server returns `503
+  Service Unavailable` on every request. Bind the namespace in your
+  `wrangler.toml` or `wrangler.jsonc` before deploying.
+</Warning>
+
+If `RS_TOKENS_ENC_KEY` is not set in production, tokens are stored in KV unencrypted and a warning is logged. In local development this is acceptable.
+
+## Storage
+
+`createMCPServer` sets up token and session storage automatically based on your environment:
+
+- If a `TOKENS` KV namespace binding is present, it uses Cloudflare KV with an in-memory fallback.
+- If `RS_TOKENS_ENC_KEY` is set, all stored values are encrypted with AES-256-GCM.
+- If `TOKENS` is missing, the server returns `503 Service Unavailable` on every request.
+
+You do not need to instantiate storage backends directly. See [Storage backends](/api/storage-backends) for the full reference.

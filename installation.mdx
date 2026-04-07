@@ -1,0 +1,83 @@
+---
+title: "Installation"
+description: "Requirements and installation instructions for @phake/mcp."
+---
+
+## Requirements
+
+- [Bun](https://bun.sh) 1.x or Node.js 20+
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) — required for Cloudflare Workers deployments
+- A Cloudflare account with Workers and KV access — required for Worker deployments
+
+## Install the package
+
+<CodeGroup>
+```bash npm
+npm install @phake/mcp
+```
+
+```bash bun
+bun add @phake/mcp
+```
+
+```bash yarn
+yarn add @phake/mcp
+```
+
+```bash pnpm
+pnpm add @phake/mcp
+```
+</CodeGroup>
+
+## Package exports
+
+`@phake/mcp` exposes three entry points:
+
+| Export | Import path | Description |
+|--------|-------------|-------------|
+| Core | `@phake/mcp` | `defineTool`, `createMCPServer`, and all helpers |
+| Worker runtime | `@phake/mcp/runtime/worker` | Cloudflare Workers adapter internals |
+| Node runtime | `@phake/mcp/runtime/node` | Node.js adapter internals (**experimental**) |
+
+Most projects only need the core entry point. The runtime exports are used internally by the adapters and are available if you need lower-level access.
+
+```typescript
+import { defineTool, createMCPServer } from "@phake/mcp";
+```
+
+## Peer dependencies
+
+The following peer dependencies are **optional**. Install them only if you use the corresponding runtime or feature:
+
+| Package | When required |
+|---------|--------------|
+| `hono` | Node.js runtime (`node-hono` template) |
+| `@hono/node-server` | Node.js runtime (`node-hono` template) |
+| `better-sqlite3` | `SqliteSessionStore` storage backend |
+
+<Note>
+  If you scaffold a project with `bun create @phake/mcp`, the template's
+  `package.json` already lists the correct peer dependencies for your chosen
+  runtime. You only need to install them manually when adding `@phake/mcp` to an
+  existing project.
+</Note>
+
+Install peer dependencies as needed:
+
+<CodeGroup>
+```bash npm
+# Node.js runtime
+npm install hono @hono/node-server
+
+# SQLite session store
+npm install better-sqlite3
+```
+
+```bash bun
+# Node.js runtime
+bun add hono @hono/node-server
+
+# SQLite session store
+bun add better-sqlite3
+```
+</CodeGroup>

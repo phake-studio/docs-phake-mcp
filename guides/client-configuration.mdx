@@ -1,0 +1,118 @@
+---
+title: "Client Setup"
+description: "Configure your MCP client to connect to a @phake/mcp server. Covers Claude Desktop, Claude Code, Cursor, VSCode, and Claude Web."
+---
+
+Different MCP clients support different transport types. Choose the tab for your client below.
+
+<Tabs>
+  <Tab title="Claude Desktop">
+    Claude Desktop supports **stdio** (local process) and remote **URL** transports.
+
+    **Config file location:**
+    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+    - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+    **Local (stdio)** — runs your server as a local process:
+
+    ```json claude_desktop_config.json
+    {
+      "mcpServers": {
+        "my-api": {
+          "command": "node",
+          "args": ["./dist/index.js"],
+          "env": {
+            "AUTH_STRATEGY": "bearer",
+            "BEARER_TOKEN": "your-token"
+          }
+        }
+      }
+    }
+    ```
+
+    **Remote (URL)** — connects to a deployed server over HTTP:
+
+    ```json claude_desktop_config.json
+    {
+      "mcpServers": {
+        "my-api": {
+          "url": "https://your-server.com/mcp",
+          "headers": {
+            "Authorization": "Bearer your-token"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Claude Code">
+    Claude Code uses **stdio** transport only.
+
+    **Config file location:** `~/.claude/settings.json`
+
+    ```json settings.json
+    {
+      "mcpServers": {
+        "my-api": {
+          "command": "bun",
+          "args": ["run", "./src/index.ts"]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Cursor / VSCode">
+    Cursor and VSCode support **stdio** and **SSE** transports.
+
+    **Config file location:**
+    - Cursor: `mcp.json` in your project root
+    - VSCode: `.vscode/mcp.json`
+
+    ```json mcp.json
+    {
+      "mcpServers": {
+        "my-api": {
+          "url": "https://your-server.com/mcp",
+          "headers": {
+            "Authorization": "Bearer your-token"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Claude Web">
+    Claude Web connects to MCP servers via **Custom Connectors**. The connector uses OAuth for authentication and connects over HTTP/SSE.
+
+    **Adding a connector:**
+
+    - **Pro/Max plans**: Go to **Customize > Connectors**, click "+", then "Add custom connector".
+    - **Team/Enterprise**: An owner adds the connector under **Organization settings > Connectors**. Members can then connect to it.
+
+    **Connector configuration:**
+
+    ```json
+    {
+      "url": "https://your-mcp-server.com/mcp",
+      "auth": {
+        "type": "oauth",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret"
+      }
+    }
+    ```
+
+    **Network requirements:**
+
+    - Your server must be publicly accessible from the internet. Localhost URLs are not supported.
+    - Claude connects from Anthropic's cloud infrastructure, not from your local machine.
+    - If your server has a firewall, allowlist Anthropic's IP addresses.
+
+    <Warning>
+      Only connect to servers you trust. Review the permissions requested during OAuth authorization and disable any tools you don't need.
+    </Warning>
+  </Tab>
+</Tabs>

@@ -1,0 +1,106 @@
+---
+title: "OAuth Setup"
+description: "Configure OAuth 2.1 for your MCP server. Your server acts as an authorization server that proxies authentication to an upstream provider such as Google."
+---
+
+Your `@phake/mcp` server acts as an **OAuth 2.1 authorization server**. When a client authenticates, your server proxies the flow to an upstream provider (e.g., Google), maps the resulting provider token to an internal RS token, and returns that token to the client.
+
+<Note>
+  Your server must be publicly accessible for OAuth to work. Clients connect from their own infrastructure, and the provider's callback must be able to reach your `/oauth/callback` endpoint.
+</Note>
+
+<Steps>
+  <Step title="Create an OAuth app with your provider">
+    Register an OAuth application with your identity provider (e.g., Google Cloud Console, GitHub, etc.) and collect:
+
+    - **Client ID** — the public identifier for your app
+    - **Client Secret** — the private credential for your app
+
+    Set the authorized redirect URI to:
+
+    ```
+    https://your-server.com/oauth/callback
+    ```
+
+    Replace `your-server.com` with your deployed server's domain.
+  </Step>
+
+  <Step title="Set the required environment variables">
+    Configure the following environment variables in your deployment. For Cloudflare Workers, use `wrangler secret put` for secrets and `wrangler.toml` / `wrangler.jsonc` for non-sensitive values.
+
+    | Variable | Description |
+    |---|---|
+    | `OAUTH_CLIENT_ID` | The client ID issued to your MCP server (for clients connecting to your server) |
+    | `OAUTH_CLIENT_SECRET` | The client secret for your MCP server |
+    | `OAUTH_SCOPES` | Space-separated list of OAuth scopes your server requests |
+    | `OAUTH_REDIRECT_URI` | The redirect URI registered with your provider (e.g., `https://your-server.com/oauth/callback`) |
+    | `PROVIDER_CLIENT_ID` | The client ID from your upstream provider (e.g., Google) |
+    | `PROVIDER_CLIENT_SECRET` | The client secret from your upstream provider |
+    | `PROVIDER_ACCOUNTS_URL` | The provider's account/userinfo endpoint URL |
+
+    For Cloudflare Workers, set secrets via the CLI:
+
+    ```bash
+    wrangler secret put OAUTH_CLIENT_SECRET
+    wrangler secret put PROVIDER_CLIENT_SECRET
+    ```
+
+    For local development, add all variables to `.dev.vars`:
+
+    ```ini .dev.vars
+    OAUTH_CLIENT_ID=your-oauth-client-id
+    OAUTH_CLIENT_SECRET=your-oauth-client-secret
+    OAUTH_SCOPES=openid email profile
+    OAUTH_REDIRECT_URI=https://your-server.com/oauth/callback
+    PROVIDER_CLIENT_ID=your-provider-client-id
+    PROVIDER_CLIENT_SECRET=your-provider-client-secret
+    PROVIDER_ACCOUNTS_URL=https://www.googleapis.com/oauth2/v3/userinfo
+    ```
+  </Step>
+
+  <Step title="Deploy your server publicly">
+    Deploy your server so it is reachable from the internet. For Cloudflare Workers:
+
+    ```bash
+    wrangler deploy
+    ```
+
+    Your server's base URL will be something like `https://your-worker.your-subdomain.workers.dev`.
+
+    <Warning>
+      Localhost URLs will not work for OAuth. The provider's callback and client redirect must reach your server over a public URL.
+    </Warning>
+  </Step>
+
+  <Step title="Connect your MCP client">
+    Point your MCP client at the `/authorize` endpoint to begin the OAuth flow. For example, when configuring a Claude Web custom connector:
+
+    ```json
+    {
+      "url": "https://your-server.com/mcp",
+      "auth": {
+        "type": "oauth",
+        "clientId": "your-oauth-client-id",
+        "clientSecret": "your-oauth-client-secret"
+      }
+    }
+    ```
+
+    The client will redirect to `/authorize`, your server will proxy the request to the upstream provider, and after the user grants access the client receives an RS token it can use for subsequent MCP requests.
+  </Step>
+</Steps>
+
+## OAuth endpoints
+
+Your server exposes the following OAuth 2.1 endpoints automatically:
+
+| Path | Description |
+|---|---|
+| `/.well-known/oauth-authorization-server` | OAuth discovery metadata |
+| `/.well-known/oauth-protected-resource` | Protected resource metadata |
+| `/authorize` | Authorization request — start the OAuth flow here |
+| `/token` | Token exchange |
+| `/oauth/callback` | OAuth callback (redirect URI for your provider) |
+| `/oauth/provider-callback` | Provider-specific callback handler |
+| `/revoke` | Token revocation |
+| `/register` | Dynamic client registration |
