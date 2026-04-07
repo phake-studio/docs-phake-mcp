@@ -6,7 +6,7 @@ description: "Configure OAuth 2.1 for your MCP server. Your server acts as an au
 Your `@phake/mcp` server acts as an **OAuth 2.1 authorization server**. When a client authenticates, your server proxies the flow to an upstream provider (e.g., Google), maps the resulting provider token to an internal RS token, and returns that token to the client.
 
 <Note>
-  Your server must be publicly accessible for OAuth to work. Clients connect from their own infrastructure, and the provider's callback must be able to reach your `/oauth/callback` endpoint.
+  Your server must be publicly accessible for OAuth to work. Clients connect from their own infrastructure, and the provider's callback must be able to reach your `/oauth/provider-callback` endpoint.
 </Note>
 
 <Steps>
@@ -19,7 +19,7 @@ Your `@phake/mcp` server acts as an **OAuth 2.1 authorization server**. When a c
     Set the authorized redirect URI to:
 
     ```
-    https://your-server.com/oauth/callback
+    https://your-server.com/oauth/provider-callback
     ```
 
     Replace `your-server.com` with your deployed server's domain.
@@ -33,7 +33,7 @@ Your `@phake/mcp` server acts as an **OAuth 2.1 authorization server**. When a c
     | `OAUTH_CLIENT_ID` | The client ID issued to your MCP server (for clients connecting to your server) |
     | `OAUTH_CLIENT_SECRET` | The client secret for your MCP server |
     | `OAUTH_SCOPES` | Space-separated list of OAuth scopes your server requests |
-    | `OAUTH_REDIRECT_URI` | The redirect URI registered with your provider (e.g., `https://your-server.com/oauth/callback`) |
+    | `OAUTH_REDIRECT_URI` | The redirect URI registered with your provider (e.g., `https://your-server.com/oauth/provider-callback`) |
     | `PROVIDER_CLIENT_ID` | The client ID from your upstream provider (e.g., Google) |
     | `PROVIDER_CLIENT_SECRET` | The client secret from your upstream provider |
     | `PROVIDER_ACCOUNTS_URL` | The provider's account/userinfo endpoint URL |
@@ -51,7 +51,7 @@ Your `@phake/mcp` server acts as an **OAuth 2.1 authorization server**. When a c
     OAUTH_CLIENT_ID=your-oauth-client-id
     OAUTH_CLIENT_SECRET=your-oauth-client-secret
     OAUTH_SCOPES=openid email profile
-    OAUTH_REDIRECT_URI=https://your-server.com/oauth/callback
+    OAUTH_REDIRECT_URI=https://your-server.com/oauth/provider-callback
     PROVIDER_CLIENT_ID=your-provider-client-id
     PROVIDER_CLIENT_SECRET=your-provider-client-secret
     PROVIDER_ACCOUNTS_URL=https://www.googleapis.com/oauth2/v3/userinfo
@@ -100,7 +100,7 @@ Your server exposes the following OAuth 2.1 endpoints automatically:
 | `/.well-known/oauth-protected-resource` | Protected resource metadata |
 | `/authorize` | Authorization request — start the OAuth flow here |
 | `/token` | Token exchange |
-| `/oauth/callback` | OAuth callback (redirect URI for your provider) |
-| `/oauth/provider-callback` | Provider-specific callback handler |
+| `/oauth/provider-callback` | Provider callback (redirect URI for upstream provider) |
+| `/oauth/callback` | OAuth callback (success page after auth completes) |
 | `/revoke` | Token revocation |
 | `/register` | Dynamic client registration |

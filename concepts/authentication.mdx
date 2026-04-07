@@ -40,7 +40,7 @@ AUTH_STRATEGY=oauth
 OAUTH_CLIENT_ID=your-mcp-client-id
 OAUTH_CLIENT_SECRET=your-mcp-client-secret
 OAUTH_SCOPES=openid profile email
-OAUTH_REDIRECT_URI=https://your-server.com/oauth/callback
+OAUTH_REDIRECT_URI=https://your-server.com/oauth/provider-callback
 
 PROVIDER_CLIENT_ID=your-provider-client-id
 PROVIDER_CLIENT_SECRET=your-provider-client-secret
@@ -67,8 +67,8 @@ The OAuth endpoints exposed by the server are:
 | `/.well-known/oauth-protected-resource` | Protected resource metadata |
 | `/authorize` | Authorization request |
 | `/token` | Token exchange |
-| `/oauth/callback` | OAuth callback |
 | `/oauth/provider-callback` | Provider callback |
+| `/oauth/callback` | OAuth callback |
 | `/revoke` | Token revocation |
 | `/register` | Dynamic client registration |
 

@@ -1,0 +1,117 @@
+---
+title: "GitHub OAuth"
+description: "Configure GitHub OAuth authentication for your MCP server."
+---
+
+Use the `github` strategy to authenticate users with their GitHub accounts. This is a preset of the generic OAuth flow with GitHub's endpoints pre-configured.
+
+## Creating a GitHub OAuth App
+
+1. Go to your GitHub account **Settings** > **Developer settings**
+2. Select **OAuth Apps** > **New OAuth App**
+3. Fill in the application details:
+   - **Application name**: Choose a descriptive name (e.g., "My MCP Server")
+   - **Homepage URL**: Your server's homepage URL (e.g., `https://my-mcp.example.com`)
+   - **Authorization callback URL**: 
+     - For production: `https://your-domain.com/oauth/provider-callback`
+     - For local development: `http://localhost:3000/oauth/provider-callback`
+4. Click **Register application**
+5. On the next page, click **Generate a new client secret**
+6. Copy the **Client ID** and **Client Secret**
+
+## Environment Setup
+
+```bash
+AUTH_STRATEGY=github
+OAUTH_CLIENT_ID=your-github-client-id
+OAUTH_CLIENT_SECRET=your-github-client-secret
+OAUTH_SCOPES=read:user,repo
+OAUTH_REDIRECT_URI=https://your-server.com/oauth/provider-callback
+```
+
+## Preset Values
+
+| Setting | Default |
+|---------|---------|
+| Accounts URL | `https://github.com` |
+| Authorization URL | `https://github.com/login/oauth/authorize` |
+| Token URL | `https://github.com/login/oauth/access_token` |
+| Default scopes | `read:user` |
+
+## Available Scopes
+
+GitHub OAuth scopes you may need:
+
+| Scope | Description |
+|-------|-------------|
+| `read:user` | Read user profile information |
+| `user:email` | Read user email addresses |
+| `read:org` | Read organization membership |
+| `repo` | Full control of private and public repositories |
+| `repo:status` | Commit status access |
+| `workflow` | Update GitHub Actions workflow files |
+
+## Example: GitHub API Access
+
+```bash
+AUTH_STRATEGY=github
+OAUTH_CLIENT_ID=Iv1.xxxxxxxx
+OAUTH_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OAUTH_SCOPES=read:user,repo
+OAUTH_REDIRECT_URI=https://my-mcp.example.com/oauth/provider-callback
+```
+
+## Tool Context
+
+When `AUTH_STRATEGY=github`, successful authentication populates the tool context with:
+
+- `context.providerToken` — the GitHub access token
+- `context.resolvedHeaders` — `{ Authorization: "Bearer <github-access-token>" }`
+- `context.provider` — provider info object with `accessToken`, `refreshToken` (if granted), `expiresAt`, `scopes`
+- `context.authStrategy` — `"github"`
+
+## Example Tool
+
+```typescript
+import { defineTool, assertProviderToken } from "@phake/mcp";
+import { z } from "zod";
+
+const listReposTool = defineTool({
+  name: "list_repos",
+  description: "List the authenticated user's repositories",
+  inputSchema: z.object({
+    sort: z.enum(["created", "updated", "pushed", "full_name"]).optional(),
+    perPage: z.number().int().min(1).max(100).default(30),
+  }),
+  requiresAuth: true,
+  handler: async (args, context) => {
+    assertProviderToken(context);
+    
+    const url = new URL("https://api.github.com/user/repos");
+    url.searchParams.set("sort", args.sort ?? "updated");
+    url.searchParams.set("per_page", String(args.perPage));
+    
+    const response = await fetch(url.toString(), {
+      headers: {
+        ...context.resolvedHeaders,
+        "Accept": "application/vnd.github.v3+json",
+      },
+    });
+    return await response.json();
+  },
+});
+```
+
+## Self-Hosted GitHub Enterprise
+
+If you're using GitHub Enterprise (self-hosted), override the preset endpoints:
+
+```bash
+AUTH_STRATEGY=github
+OAUTH_CLIENT_ID=your-enterprise-client-id
+OAUTH_CLIENT_SECRET=your-enterprise-client-secret
+OAUTH_SCOPES=read:user
+OAUTH_REDIRECT_URI=https://my-mcp.example.com/oauth/provider-callback
+OAUTH_AUTHORIZATION_URL=https://github.your-company.com/login/oauth/authorize
+OAUTH_TOKEN_URL=https://github.your-company.com/login/oauth/access_token
+```

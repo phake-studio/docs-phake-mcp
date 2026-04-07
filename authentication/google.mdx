@@ -1,0 +1,115 @@
+---
+title: "Google OAuth"
+description: "Configure Google OAuth authentication for your MCP server."
+---
+
+Use the `google` strategy to authenticate users with their Google accounts. This is a preset of the generic OAuth flow with Google's endpoints pre-configured.
+
+## Creating a Google OAuth Client
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Select or create a project
+3. Navigate to **APIs & Services** > **Credentials**
+4. Click **Create Credentials** > **OAuth client ID**
+5. For Application type, select **Web application**
+6. Configure the authorized redirect URI:
+   - For production: `https://your-domain.com/oauth/provider-callback`
+   - For local development: `http://localhost:3000/oauth/provider-callback`
+7. Copy the **Client ID** and **Client Secret**
+
+## Environment Setup
+
+```bash
+AUTH_STRATEGY=google
+OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+OAUTH_CLIENT_SECRET=GOCSPX-your-secret
+OAUTH_SCOPES=https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly
+OAUTH_REDIRECT_URI=https://your-server.com/oauth/provider-callback
+```
+
+## Preset Values
+
+| Setting | Default |
+|---------|---------|
+| Accounts URL | `https://accounts.google.com` |
+| Authorization URL | `https://accounts.google.com/o/oauth2/v2/auth` |
+| Token URL | `https://oauth2.googleapis.com/token` |
+| Default scopes | `openid email profile` |
+
+You can override any preset with explicit `OAUTH_*` values.
+
+## Example: Google Sheets + Drive
+
+```bash
+AUTH_STRATEGY=google
+OAUTH_CLIENT_ID=123456789-abc.apps.googleusercontent.com
+OAUTH_CLIENT_SECRET=GOCSPX-your-secret
+OAUTH_SCOPES=https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly
+OAUTH_REDIRECT_URI=https://my-mcp.example.com/oauth/provider-callback
+AUTH_ALLOW_DIRECT_BEARER=true
+```
+
+## Available Scopes
+
+| Scope | Description |
+|-------|-------------|
+| `https://www.googleapis.com/auth/spreadsheets` | Read/write Google Sheets |
+| `https://www.googleapis.com/auth/drive.readonly` | Read Google Drive files |
+| `https://www.googleapis.com/auth/drive` | Full Google Drive access |
+| `https://www.googleapis.com/auth/gmail.readonly` | Read Gmail |
+| `openid` | OpenID Connect authentication |
+| `email` | Access email address |
+| `profile` | Access profile information |
+
+## Tool Context
+
+When `AUTH_STRATEGY=google`, successful authentication populates the tool context with:
+
+- `context.providerToken` — the Google access token
+- `context.resolvedHeaders` — `{ Authorization: "Bearer <google-access-token>" }`
+- `context.provider` — provider info object with `accessToken`, `refreshToken`, `expiresAt`, `scopes`
+- `context.authStrategy` — `"google"`
+
+## Example Tool
+
+```typescript
+import { defineTool, assertProviderToken } from "@phake/mcp";
+import { z } from "zod";
+
+const readSheetTool = defineTool({
+  name: "read_sheet",
+  description: "Read data from a Google Sheet",
+  inputSchema: z.object({
+    spreadsheetId: z.string().describe("The spreadsheet ID"),
+    range: z.string().describe("The cell range (e.g., Sheet1!A1:B10)"),
+  }),
+  requiresAuth: true,
+  handler: async (args, context) => {
+    assertProviderToken(context);
+    
+    const response = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${args.spreadsheetId}/values/${args.range}`,
+      { headers: context.resolvedHeaders }
+    );
+    return await response.json();
+  },
+});
+```
+
+## Additional Options
+
+### Offline Access
+
+To receive a refresh token (for long-lived access), add `access_type=offline` to extra auth params:
+
+```bash
+OAUTH_EXTRA_AUTH_PARAMS=access_type=offline&prompt=consent
+```
+
+### Force Consent
+
+To force the consent screen to appear every time:
+
+```bash
+OAUTH_EXTRA_AUTH_PARAMS=prompt=consent
+```

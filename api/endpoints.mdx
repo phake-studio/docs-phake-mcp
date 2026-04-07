@@ -128,17 +128,17 @@ Exchanges an authorization code or refresh token for an access token.
 
 **When to use it:** MCP clients call this automatically after receiving an authorization code via the callback. Supports the `authorization_code` and `refresh_token` grant types.
 
-### `GET /oauth/callback`
-
-Browser landing page after the server redirects back with an RS authorization code. Returns an HTML page that signals the MCP client via `postMessage` if the page was opened as a popup.
-
-**When to use it:** Configure this as the OAuth redirect URI that points back to the MCP client. This is the intermediate RS callback — the client reads the `code` parameter from the URL and exchanges it via `POST /token`.
-
 ### `GET /oauth/provider-callback`
 
 Receives the authorization code from the upstream OAuth provider (e.g., Google, GitHub) and completes the provider token exchange.
 
 **When to use it:** Configure this path as the redirect URI in your upstream OAuth application settings (e.g., in the Google Cloud Console). The server uses it to map provider tokens to RS tokens.
+
+### `GET /oauth/callback`
+
+Browser landing page after the server redirects back with an RS authorization code. Returns an HTML page that signals the MCP client via `postMessage` if the page was opened as a popup.
+
+**When to use it:** This is the OAuth redirect URI that points back to the MCP client. The client reads the `code` parameter from the URL and exchanges it via `POST /token`.
 
 ### `POST /revoke`
 

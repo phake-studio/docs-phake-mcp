@@ -28,7 +28,8 @@
             "pages": [
               "introduction",
               "quickstart",
-              "installation"
+              "installation",
+              "comparison"
             ]
           },
           {
@@ -37,6 +38,13 @@
               "concepts/tools",
               "concepts/authentication",
               "concepts/storage"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "authentication/google",
+              "authentication/github"
             ]
           },
           {
