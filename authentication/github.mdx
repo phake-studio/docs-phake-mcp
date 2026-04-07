@@ -115,3 +115,24 @@ OAUTH_REDIRECT_URI=https://my-mcp.example.com/oauth/provider-callback
 OAUTH_AUTHORIZATION_URL=https://github.your-company.com/login/oauth/authorize
 OAUTH_TOKEN_URL=https://github.your-company.com/login/oauth/access_token
 ```
+
+## Getting User Info
+
+Use the `getUser` helper to fetch the authenticated user's profile from GitHub:
+
+```typescript
+import { defineTool, getUser, USERINFO_ENDPOINTS, assertProviderToken } from "@phake/mcp";
+import { z } from "zod";
+
+const getProfileTool = defineTool({
+  name: "get_profile",
+  description: "Get the authenticated user's GitHub profile",
+  inputSchema: z.object({}),
+  requiresAuth: true,
+  handler: async (_args, context) => {
+    assertProviderToken(context);
+    const user = await getUser(context.providerToken, USERINFO_ENDPOINTS.github);
+    return user;
+  },
+});
+```

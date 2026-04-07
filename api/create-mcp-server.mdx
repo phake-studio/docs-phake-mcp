@@ -8,13 +8,15 @@ description: "Factory function that creates a fully configured MCP server instan
 `createMCPServer` is the main entry point for building an MCP server. It wires together your tool definitions, storage backends, authentication strategy, and HTTP routing into a single object that Cloudflare Workers can export directly.
 
 ```typescript
-function createMCPServer(options: MCPServerOptions): MCPServer
+function createMCPServer<TEnv = unknown>(options: MCPServerOptions<TEnv>): MCPServer<TEnv>
 ```
 
 <Note>
   Cloudflare Workers is the primary supported runtime. The returned `MCPServer`
   object exposes a `fetch` method that matches the Workers module export
   interface, so you can use `export default` directly.
+
+  Use the generic `TEnv` parameter to get type-safe access to your Cloudflare bindings in tool handlers.
 </Note>
 
 ## Parameters
@@ -33,11 +35,11 @@ function createMCPServer(options: MCPServerOptions): MCPServer
 
 ## Return value
 
-Returns an `MCPServer` object:
+Returns an `MCPServer<TEnv>` object:
 
 ```typescript
-interface MCPServer {
-  fetch: (request: Request, env: unknown) => Promise<Response>;
+interface MCPServer<TEnv = unknown> {
+  fetch: (request: Request, env: TEnv) => Promise<Response>;
 }
 ```
 
@@ -69,19 +71,39 @@ const server = createMCPServer({
 export default server;
 ```
 
-### With multiple tools
+### With type-safe environment bindings
+
+Define your environment type and use it with `createMCPServer` to get type-safe bindings:
 
 ```typescript
-import { createMCPServer } from "@phake/mcp";
-import { greetTool } from "./tools/greet";
-import { profileTool } from "./tools/profile";
-import { searchTool } from "./tools/search";
+interface Env {
+  TOKENS: KVNamespace;
+  MY_DATABASE: D1Database;
+  MY_BUCKET: R2Bucket;
+}
 
-const server = createMCPServer({
-  tools: [greetTool, profileTool, searchTool],
+const server = createMCPServer<Env>({
+  tools: [greetTool],
 });
 
 export default server;
+```
+
+In your tool handlers, the context now includes your typed bindings:
+
+```typescript
+const greetTool = defineTool({
+  name: "greet",
+  description: "Returns a greeting for the given name",
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  handler: async (args, context) => {
+    // context.env is typed as Env
+    const value = await context.env.MY_DATABASE.prepare("SELECT * FROM users").first();
+    return { message: `Hello, ${args.name}!`, dbResult: value };
+  },
+});
 ```
 
 ## Environment variables
