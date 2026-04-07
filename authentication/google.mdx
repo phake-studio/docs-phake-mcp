@@ -115,23 +115,34 @@ OAUTH_EXTRA_AUTH_PARAMS=prompt=consent
 
 ## Getting User Info
 
-Use the `getUser` helper to fetch the authenticated user's profile from Google:
+Use `context.getUser()` to fetch the authenticated user's profile from Google:
 
 ```typescript
-import { defineTool, getUser, USERINFO_ENDPOINTS, assertProviderToken } from "@phake/mcp";
-import { z } from "zod";
-
 const getProfileTool = defineTool({
   name: "get_profile",
   description: "Get the authenticated user's Google profile",
   inputSchema: z.object({}),
   requiresAuth: true,
   handler: async (_args, context) => {
-    assertProviderToken(context);
-    const user = await getUser(context.providerToken, USERINFO_ENDPOINTS.google);
+    const { data: user, error } = await context.getUser();
+    if (error) {
+      return { error };
+    }
     return user;
   },
 });
+```
+
+Or use the standalone `getUser` helper with `USERINFO_ENDPOINTS`:
+
+```typescript
+import { getUser, USERINFO_ENDPOINTS, assertProviderToken } from "@phake/mcp";
+
+handler: async (_args, context) => {
+  assertProviderToken(context);
+  const user = await getUser(context.providerToken, USERINFO_ENDPOINTS.google);
+  return user;
+}
 ```
 
 The `USERINFO_ENDPOINTS` constant provides pre-configured URLs:

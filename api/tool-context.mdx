@@ -21,9 +21,9 @@ interface Env {
 
 const server = createMCPServer<Env>({ tools: [...] });
 
-// context.env is typed as Env
+// context.bindings is typed as Env
 handler: async (args, context) => {
-  const user = await context.env.MY_DATABASE.prepare("SELECT * FROM users").first();
+  const user = await context.bindings.MY_DATABASE.prepare("SELECT * FROM users").first();
 }
 ```
 
@@ -35,7 +35,7 @@ handler: async (args, context) => {
   logs or external systems.
 </ParamField>
 
-<ParamField body="env" type="TEnv | undefined">
+<ParamField body="bindings" type="TEnv | undefined">
   Your Cloudflare environment bindings. Only available when using
   `createMCPServer<TEnv>()`. Use this to access KV namespaces, D1 databases, R2
   buckets, and other Workers bindings with full type safety.
@@ -128,6 +128,36 @@ handler: async (args, context) => {
   Use `resolvedHeaders` instead — it contains the correct auth headers for
   forwarding to external services regardless of the active strategy.
 </ParamField>
+
+## Helper Methods
+
+ToolContext includes helper methods that return a `{ data, error }` pattern for safe error handling.
+
+### `getToken()`
+
+Returns the access token or an error if not available.
+
+```typescript
+const { data: token, error } = context.getToken();
+if (error) {
+  return { content: [{ type: "text", text: error }], isError: true };
+}
+// Use token for API calls
+```
+
+### `getUser()`
+
+Fetches user info from the OAuth provider. Works with Google, GitHub, and other OAuth providers.
+
+```typescript
+const { data: user, error } = await context.getUser();
+if (error) {
+  return { content: [{ type: "text", text: error }], isError: true };
+}
+// user.email, user.name, etc.
+```
+
+This is a convenience wrapper around `getUser()` + `USERINFO_ENDPOINTS` that handles the userinfo URL automatically based on the auth strategy.
 
 ## `AuthenticatedToolContext`
 
