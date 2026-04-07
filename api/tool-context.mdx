@@ -96,6 +96,7 @@ handler: async (args, context) => {
     refreshToken?: string;
     expiresAt?: number;
     scopes?: string[];
+    idTokenClaims?: Record<string, unknown>;  // Decoded from provider's id_token
   }
   ```
 </ParamField>

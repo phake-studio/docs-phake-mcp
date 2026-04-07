@@ -151,3 +151,35 @@ The `USERINFO_ENDPOINTS` constant provides pre-configured URLs:
 |----------|----------|
 | `google` | `https://www.googleapis.com/oauth2/v2/userinfo` |
 | `github` | `https://api.github.com/user` |
+
+## Access Google ID Token Claims
+
+When using Google OAuth, the `id_token` is automatically decoded and available via `context.provider?.idTokenClaims`:
+
+```typescript
+const getProfileTool = defineTool({
+  name: "get_profile",
+  description: "Get the authenticated user's profile",
+  inputSchema: z.object({}),
+  requiresAuth: true,
+  handler: async (_args, context) => {
+    const claims = context.provider?.idTokenClaims;
+    if (!claims) {
+      return { error: "No ID token claims available" };
+    }
+    // claims.email, claims.name, claims.sub, etc.
+    return {
+      email: claims.email,
+      name: claims.name,
+      picture: claims.picture,
+    };
+  },
+});
+```
+
+Common Google ID token claims:
+- `email` - User's email address
+- `name` - User's full name
+- `picture` - URL to user's profile picture
+- `sub` - User's unique Google ID
+
